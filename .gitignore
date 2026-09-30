@@ -6,5 +6,11 @@ __pycache__/
 
 # Generated pipeline outputs (regenerable from src/, not source)
 data/*.npz
+data/*.csv
 plots/*.png
 plots/*.pdf
+
+# Local build scaffolding for compiling pmcxcl from source (arm64 wheel
+# unavailable on PyPI as of 2026-09-30) -- not a project source dependency,
+# see Issue and Solution in Obsidian for why this exists.
+build_src/

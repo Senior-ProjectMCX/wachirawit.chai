@@ -154,19 +154,36 @@ def run_simulation(nphoton=1e8, geometry=cfg.DEFAULT_GEOMETRY, unitinmm=cfg.VOXE
     print("Simulation finished.")
 
     detp = res["detp"]
-    detid = detp["detid"]
-    ppath = detp["ppath"]
 
-    if "mom" not in detp:
-        raise RuntimeError(
-            "Momentum transfer ('mom') missing from output. "
-            "Ensure cfg['ismomentum']=1 and savedetflag contains 'm'."
-        )
-    mom = detp["mom"]
+    if isinstance(detp, dict):
+        # pmcx (CUDA) mcxlab-style: already parsed into named fields.
+        detid = detp["detid"]
+        ppath = detp["ppath"]
+        if "mom" not in detp:
+            raise RuntimeError(
+                "Momentum transfer ('mom') missing from output. "
+                "Ensure cfg['ismomentum']=1 and savedetflag contains 'm'."
+            )
+        mom = detp["mom"]
+    else:
+        # pmcxcl (OpenCL) raw form: detp is (reclen, n_photons), reclen = 1
+        # (detid) + n_media (ppath) + n_media (mom); here n_media=4 (shallow,
+        # deep, mylar, acrylic) so reclen=9. Empirically verified 2026-09-30:
+        # rows 3-4 (mylar/acrylic ppath) are exactly zero in the 'simplified'
+        # slab geometry, which has no mylar/acrylic voxels -- confirms the
+        # row layout below.
+        n_media = (detp.shape[0] - 1) // 2
+        if detp.shape[0] != 1 + 2 * n_media:
+            raise RuntimeError(f"Unexpected detp record length {detp.shape[0]}; "
+                                "expected 1 + 2*n_media (detid + ppath + mom).")
+        detid = detp[0, :]
+        ppath = detp[1:1 + n_media, :].T      # (n_photons, n_media)
+        mom = detp[1 + n_media:1 + 2 * n_media, :].T
 
     # ppath/mom columns are 0-indexed by (medium label - 1): col0=medium 1
     # (shallow), col1=medium 2 (deep). This ordering was empirically verified
-    # in core/code/simulation.py (bug 3.1 fix) and is unchanged here.
+    # in core/code/simulation.py (bug 3.1 fix) and reconfirmed above for the
+    # pmcxcl raw layout.
     SHALLOW, DEEP = 0, 1
     processed = {}
     for det_idx in range(1, len(detpos) + 1):
