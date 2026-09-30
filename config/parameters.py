@@ -96,11 +96,10 @@ def flow_to_alpha_db(flow, a=DEFAULT_A_MM2_S_PER_FR, db0=DEFAULT_DB0_MM2_S):
 # SEMI-INFINITE HOMOGENEOUS MODEL (BFI fitting / geometry gate)
 # ============================================================
 Z0_MM = 1.0 / MU_SP_MM
-# Extrapolated boundary zb = 2(1+Reff) / (3 mu_s' (1-Reff)), Reff = 0.493 for
-# n=1.37 as stated in the paper. (core/ hard-coded 1.76/mu_s', which matches
-# no stated Reff; the difference moves fitted BFI by only ~2%.)
-R_EFF = 0.493
-ZB_MM = 2.0 * (1.0 + R_EFF) / (3.0 * MU_SP_MM * (1.0 - R_EFF))
+# zb = 1.76/mu_s' for n=1.37, as given by Wu et al. 2021 (Nakabayashi's ref [37]).
+# Nakabayashi gives no Reff value, and the zb formula printed in their Eq. 3,
+# 2(1-Reff)/(3 mu_s'(1+Reff)), is inverted relative to the standard form.
+ZB_MM = 1.76 / MU_SP_MM
 
 # Target layer-sensitivity ratios c2/c1 from Nakabayashi Eq.(10)-(12); the
 # simulated geometry must reproduce these BEFORE any flow->D_B calibration.

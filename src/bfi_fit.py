@@ -15,7 +15,7 @@ import os
 import sys
 
 import numpy as np
-from scipy.optimize import minimize_scalar
+from scipy.optimize import least_squares, minimize_scalar
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from config import parameters as cfg
@@ -40,15 +40,18 @@ def semi_infinite_g1(bfi, rho_mm, tau):
 
 
 def fit_bfi_curve(g2_curve, rho_mm, beta, tau, bounds_log10=(-9.0, 1.0)):
-    """Least-squares fit of a single BFI (mm^2/s) to one g2(tau) curve, in
-    log10(BFI) space since BFI spans orders of magnitude. beta is fixed."""
-    def loss(log_bfi):
-        g1 = semi_infinite_g1(10.0 ** log_bfi, rho_mm, tau)
-        g2_model = 1.0 + beta * (g1 ** 2)
-        return np.mean((g2_model - g2_curve) ** 2)
+    """Fit BFI (mm^2/s) and beta jointly to one g2(tau) curve, as Nakabayashi
+    Eq. 3 does for each observation. BFI is fitted in log10 space since it
+    spans orders of magnitude; `beta` is the initial guess."""
+    def resid(p):
+        return 1.0 + p[1] * semi_infinite_g1(10.0 ** p[0], rho_mm, tau) ** 2 - g2_curve
 
-    res = minimize_scalar(loss, bounds=bounds_log10, method="bounded")
-    return 10.0 ** res.x
+    # Coarse 1-D search for a starting BFI with beta fixed, then refine both.
+    start = minimize_scalar(lambda lb: np.mean(resid([lb, beta]) ** 2),
+                             bounds=bounds_log10, method="bounded").x
+    res = least_squares(resid, [start, beta],
+                         bounds=([bounds_log10[0], 0.05], [bounds_log10[1], 1.0]))
+    return 10.0 ** res.x[0]
 
 
 def fit_bfi_all(g2, beta, tau):
