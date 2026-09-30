@@ -10,10 +10,19 @@ Ported from core/code/compare.py, with:
     independent scale_s/scale_d (that was overfitting, see analysis doc 3.6).
   - Deep_Flow==0 trials excluded from the train/test combos by default, to
     match the 2026-09-30 revision of Goal.md.
-  - R^2 (not just MAE/RMSE) is now the headline metric, per the 2026-09-30
-    clarification that Goal.md's "RMSE ~= 0.95" actually meant R^2 ~= 0.95.
+  - Train/test split by PRESET pump combo (108 combos), while the physics is
+    driven by the MEASURED outlet flow. Splitting on measured flow (which is
+    noisy and near-unique per trial) put repeats of the same condition on both
+    sides of the split and made calibration fit ~740 "combos".
+  - R^2 is the headline metric (Goal.md's "RMSE ~= 0.95" meant R^2 ~= 0.95).
+    Two variants: pooled over all (tau, trial) points, which penalises errors
+    that are systematic across flow conditions, and the median per-trial R^2,
+    i.e. how well a typical single curve is reproduced.
+  - BFI agreement: sim vs physical test curves fitted with the SAME
+    semi-infinite fitter (bfi_fit.py), reported as Pearson R and median ratio.
 """
 import argparse
+import json
 import os
 import sys
 
@@ -25,8 +34,11 @@ from scipy.optimize import minimize
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from config import parameters as cfg
+import bfi_fit
 import data_io
 from dcs_physics import calculate_g2
+
+CAL_TAU_STRIDE = 5    # calibrate on every 5th tau point (101 of 501) for speed
 
 
 def _combo_split(fr_s, fr_d, test_frac=0.30, seed=0):
@@ -58,16 +70,16 @@ def _synth_curves(det, fr_s, fr_d, beta, tau, trials, a, db0):
 
 
 def _r2(sim, ref):
-    """R^2 pooling all (tau, trial) points for one SDS: 1 - SS_res/SS_tot."""
-    resid = ref - sim
-    ss_res = np.sum(resid ** 2)
+    """R^2 = 1 - SS_res/SS_tot over all points of the given arrays."""
+    ss_res = np.sum((ref - sim) ** 2)
     ss_tot = np.sum((ref - ref.mean()) ** 2)
     return 1.0 - ss_res / ss_tot if ss_tot > 0 else float("nan")
 
 
 def run_comparison(pathlengths_path, plot_output_path, metrics_output_path="plots/g2_metrics.png",
                     test_frac=0.30, seed=0, cal_max_photons=5000,
-                    skip_deep_flow_zero=cfg.SKIP_DEEP_FLOW_ZERO):
+                    skip_deep_flow_zero=cfg.SKIP_DEEP_FLOW_ZERO,
+                    metrics_json_path="plots/metrics.json"):
     meta = data_io.load_physical_metadata()
     phys_g2 = data_io.load_physical_g2()
     beta = data_io.extract_beta(phys_g2)
@@ -85,55 +97,80 @@ def run_comparison(pathlengths_path, plot_output_path, metrics_output_path="plot
     det = {s: data_io.downsample_detector(pl, s + 1, cal_max_photons, rng) for s in range(3)}
 
     kept_idx = np.where(keep)[0]
-    train_sub, test_sub, n_combos = _combo_split(fr_s[kept_idx], fr_d[kept_idx], test_frac, seed)
+    train_sub, test_sub, n_combos = _combo_split(meta["fr_set_s"][kept_idx],
+                                                  meta["fr_set_d"][kept_idx], test_frac, seed)
     train_idx, test_idx = kept_idx[train_sub], kept_idx[test_sub]
     assert len(np.intersect1d(train_idx, test_idx)) == 0, "train/test overlap!"
-    print(f"{n_combos} unique flow combos -> {len(train_idx)} train / {len(test_idx)} test trials")
+    print(f"{n_combos} preset flow combos -> {len(train_idx)} train / {len(test_idx)} test trials")
 
-    # --- Calibrate (a, D_B0) jointly on TRAIN combos, one trial per combo ---
+    # --- Calibrate (a, D_B0) jointly, one representative trial per TRAIN preset combo ---
     seen, cal_trials = set(), []
     for i in train_idx:
-        key = (round(fr_s[i], 6), round(fr_d[i], 6))
+        key = (meta["fr_set_s"][i], meta["fr_set_d"][i])
         if key not in seen:
             seen.add(key)
             cal_trials.append(i)
     cal_trials = np.array(cal_trials)
+    tau_cal = tau[::CAL_TAU_STRIDE]
+    ref_cal = phys_g2[:, ::CAL_TAU_STRIDE, :][:, :, cal_trials]
 
     def cal_loss(log_params):
         a, db0 = 10.0 ** log_params[0], 10.0 ** log_params[1]
-        sim = _synth_curves(det, fr_s, fr_d, beta, tau, cal_trials, a, db0)
-        ref = phys_g2[:, :, cal_trials]
-        return np.mean((sim - ref) ** 2)
+        sim = _synth_curves(det, fr_s, fr_d, beta, tau_cal, cal_trials, a, db0)
+        return np.mean((sim - ref_cal) ** 2)
 
     print(f"Calibrating (a, D_B0) on {len(cal_trials)} train combos...")
     x0 = [np.log10(cfg.DEFAULT_A_MM2_S_PER_FR), np.log10(cfg.DEFAULT_DB0_MM2_S)]
     res = minimize(cal_loss, x0, method="Nelder-Mead",
                     bounds=[(-9.0, -3.0), (-9.0, -5.0)])
     a_star, db0_star = 10.0 ** res.x[0], 10.0 ** res.x[1]
-    print(f"  calibrated a={a_star:.4e} mm^2/s per (ml/min/100g)   D_B0={db0_star:.4e} mm^2/s")
+    print(f"  calibrated a={a_star:.4e} mm^2/s per (ml/min/100g)   D_B0={db0_star:.4e} mm^2/s "
+          f"({res.nfev} loss evaluations, converged={res.success})")
 
-    # --- Report R^2 / MAE / RMSE on TEST trials only ---
+    # --- Report metrics on TEST trials only ---
     sim_test = _synth_curves(det, fr_s, fr_d, beta, tau, test_idx, a_star, db0_star)
     ref_test = phys_g2[:, :, test_idx]
-    r2 = np.zeros(3)
-    mae = np.zeros(3)
-    rmse = np.zeros(3)
+    print("Fitting BFI (semi-infinite) on sim and physical TEST curves...")
+    bfi_sim = bfi_fit.fit_bfi_all(sim_test, beta, tau)
+    bfi_phys = bfi_fit.fit_bfi_all(ref_test, beta, tau)
+
+    per_sds = []
     per_trial_mae = np.zeros((3, len(test_idx)))
-    print("\n============ Held-out (TEST) curve metrics ============")
+    print("\n================= Held-out (TEST) metrics =================")
     for s in range(3):
         diff = sim_test[s] - ref_test[s]
-        r2[s] = _r2(sim_test[s], ref_test[s])
-        mae[s] = np.mean(np.abs(diff))
-        rmse[s] = np.sqrt(np.mean(diff ** 2))
+        per_trial_r2 = [_r2(sim_test[s][:, j], ref_test[s][:, j]) for j in range(len(test_idx))]
         per_trial_mae[s] = np.mean(np.abs(diff), axis=0)
-        flag = "PASS" if r2[s] >= 0.95 else "below target"
-        print(f"  SDS {data_io.SDS_LABELS[s]} - R^2: {r2[s]:.4f} ({flag}) | "
-              f"MAE: {mae[s]:.5f} | RMSE: {rmse[s]:.5f}")
-    print("=======================================================")
+        row = {
+            "sds": data_io.SDS_LABELS[s],
+            "r2_pooled": float(_r2(sim_test[s], ref_test[s])),
+            "r2_per_trial_median": float(np.median(per_trial_r2)),
+            "mae": float(np.mean(np.abs(diff))),
+            "rmse": float(np.sqrt(np.mean(diff ** 2))),
+            "bfi_pearson_r": float(np.corrcoef(bfi_sim[s], bfi_phys[s])[0, 1]),
+            "bfi_median_ratio_sim_over_phys": float(np.median(bfi_sim[s] / bfi_phys[s])),
+        }
+        per_sds.append(row)
+        print(f"  SDS {row['sds']}: R2 pooled={row['r2_pooled']:.4f}  "
+              f"R2 per-trial median={row['r2_per_trial_median']:.4f}  "
+              f"MAE={row['mae']:.5f}  RMSE={row['rmse']:.5f}  |  "
+              f"BFI R={row['bfi_pearson_r']:.4f}  ratio={row['bfi_median_ratio_sim_over_phys']:.3f}")
+    print("  (target: R^2 >= 0.95)")
+    print("===========================================================")
 
+    metrics = {"a_mm2_s_per_fr": a_star, "db0_mm2_s": db0_star,
+               "n_train": int(len(train_idx)), "n_test": int(len(test_idx)),
+               "n_preset_combos": int(n_combos), "cal_photons_per_sds": cal_max_photons,
+               "per_sds": per_sds}
+    os.makedirs(os.path.dirname(metrics_json_path) or ".", exist_ok=True)
+    with open(metrics_json_path, "w") as f:
+        json.dump(metrics, f, indent=2)
+    print(f"Metrics saved to {metrics_json_path}")
+
+    r2 = np.array([r["r2_pooled"] for r in per_sds])
     _overlay_plot(det, fr_s, fr_d, beta, tau, phys_g2, test_idx, a_star, db0_star, plot_output_path)
-    _metrics_plot(r2, mae, rmse, per_trial_mae, fr_s[test_idx] + fr_d[test_idx], metrics_output_path)
-    return {"a": a_star, "db0": db0_star, "r2": r2, "mae": mae, "rmse": rmse}
+    _metrics_plot(r2, per_trial_mae, fr_s[test_idx] + fr_d[test_idx], metrics_output_path)
+    return metrics
 
 
 def _overlay_plot(det, fr_s, fr_d, beta, tau, phys_g2, test_idx, a_star, db0_star, plot_output_path):
@@ -164,7 +201,7 @@ def _overlay_plot(det, fr_s, fr_d, beta, tau, phys_g2, test_idx, a_star, db0_sta
     print(f"Comparison plot saved to {plot_output_path}")
 
 
-def _metrics_plot(r2, mae, rmse, per_trial_mae, total_flow, metrics_output_path):
+def _metrics_plot(r2, per_trial_mae, total_flow, metrics_output_path):
     colors = ["#1f77b4", "#ff7f0e", "#2ca02c"]
     order = np.argsort(total_flow)
     fig, (axA, axB) = plt.subplots(1, 2, figsize=(15, 5.5))

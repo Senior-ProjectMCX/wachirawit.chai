@@ -47,7 +47,7 @@ def calculate_g1(Ls, Ld, Ys, Yd, alpha_db_s, alpha_db_d, tau_array,
     if norm == 0:
         return np.ones_like(tau_array)
 
-    g1 = np.empty_like(tau_array)
+    g1 = np.empty(len(tau_array))
     for t_idx, tau in enumerate(tau_array):
         g1[t_idx] = np.sum(abs_w * np.exp(-decay_rates * tau)) / norm
     return g1

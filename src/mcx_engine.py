@@ -6,28 +6,22 @@ its output (per-photon partial pathlength + momentum transfer per layer, per
 SDS) feeds every flow condition afterwards through dcs_physics.py, which is
 pure NumPy and fast.
 
-Ported from core/code/simulation.py with three physics fixes from the
-"DCS Two-Layer Flow Phantom Simulation Analysis" bug list:
+Ported from core/code/simulation.py with these physics fixes (bug numbers
+refer to the "DCS Two-Layer Flow Phantom Simulation Analysis" note):
 
   - bug 3.2: default geometry is 'simplified' (no Mylar voxel layer). Forcing
     the physical 0.05mm Mylar sheet into a 0.5mm voxel makes it a 10x-too-thick
-    scattering wall; the authors' own MC setup is closer to a plain two-layer
-    slab, and core/'s own validation found the slab model fit the physical
-    data better than the 'realistic' walled+Mylar geometry.
-  - bug 3.3/3.9: the top (tissue/air) boundary used a fully absorbing 'a' bc,
-    which silently discards all photons that reach z=0 instead of letting
-    ~49% Fresnel-reflect back into the tissue (n=1.37 vs air n=1.0). This
-    under-counted long paths and left SDS=3cm with too few detected photons
-    (13k out of 1e8 in the prior run). Switched to a mismatched-boundary 'm'
-    on the top face.
+    scattering wall; core/'s own validation found the plain two-layer slab fit
+    the physical data better than the walled+Mylar 'realistic' geometry.
+  - bug 3.3: the top (tissue/air) face was fully absorbing ('a'), discarding
+    photons that should Fresnel-reflect back in (n=1.37 vs air). Now 'r'
+    (Fresnel) on the -z face, see cfg.MCX_BC.
+  - bug 3.9: the 60x60mm slab centred the source, so the 3cm detector sat
+    exactly on the +x domain face. The slab is now 120x80mm with the source
+    offset (cfg.SLAB_*), leaving 50mm of tissue beyond the farthest detector.
 
-NOTE: the exact 6-character bc face ordering ('m' must land on the z=0 /
-top face specifically) has NOT been empirically re-verified in THIS repo,
-because the installed pmcxcl wheel is x86_64-only and its compiled extension
-does not run on this Apple Silicon machine (see "Issue and Solution" in
-Obsidian). Verify with a small dry run once pmcxcl actually executes, e.g. by
-checking that detected photon counts at SDS=3cm increase substantially vs.
-the all-absorbing baseline.
+The installed pmcxcl must be the arm64 build compiled from source (PyPI
+wheels are x86_64-only despite the universal2 tag) -- see scripts/setup_env.sh.
 """
 import argparse
 import os
@@ -38,12 +32,9 @@ import numpy as np
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from config import parameters as cfg
 
-try:
-    import pmcxcl as _mcx_backend
-    _BACKEND_NAME = "pmcxcl"
-except ImportError:
-    import pmcx as _mcx_backend
-    _BACKEND_NAME = "pmcx"
+import pmcxcl
+
+_BACKEND_NAME = "pmcxcl"
 
 
 def create_voxel_grid(geometry=cfg.DEFAULT_GEOMETRY, unitinmm=cfg.VOXEL_SIZE_MM):
@@ -53,9 +44,9 @@ def create_voxel_grid(geometry=cfg.DEFAULT_GEOMETRY, unitinmm=cfg.VOXEL_SIZE_MM)
       3 Mylar sheet separator ('realistic' only), 4 Acrylic wall ('realistic' only)
     """
     if geometry == "simplified":
-        nx = int(60 / unitinmm)
-        ny = int(60 / unitinmm)
-        nz = int(50 / unitinmm)
+        nx = int(cfg.SLAB_X_MM / unitinmm)
+        ny = int(cfg.SLAB_Y_MM / unitinmm)
+        nz = int(cfg.SLAB_Z_MM / unitinmm)
         vol = np.zeros((nx, ny, nz), dtype=np.uint8)
 
         z_shallow_end = int(cfg.SHALLOW_DEPTH_MM / unitinmm)
@@ -65,7 +56,7 @@ def create_voxel_grid(geometry=cfg.DEFAULT_GEOMETRY, unitinmm=cfg.VOXEL_SIZE_MM)
     elif geometry == "realistic":
         nx = int(cfg.PHANTOM_X_MM / unitinmm)
         ny = int(cfg.PHANTOM_Y_MM / unitinmm)
-        nz = int((cfg.TOTAL_DEPTH_MM + 0.5) / unitinmm)
+        nz = int(cfg.PHANTOM_Z_MM / unitinmm)
         vol = np.zeros((nx, ny, nz), dtype=np.uint8)
 
         wall_voxels = int(2.5 / unitinmm)
@@ -103,7 +94,8 @@ def run_simulation(nphoton=1e8, geometry=cfg.DEFAULT_GEOMETRY, unitinmm=cfg.VOXE
     ]
 
     nx, ny, nz = vol.shape
-    srcpos = [nx / 2.0, ny / 2.0, 0.0]
+    src_x = cfg.SLAB_SOURCE_X_MM / unitinmm if geometry == "simplified" else nx / 2.0
+    srcpos = [src_x, ny / 2.0, 0.0]
 
     sds_voxels = [int(round(d / unitinmm)) for d in cfg.SDS_MM]
     det_radius_vox = cfg.DET_RADIUS_MM / unitinmm
@@ -125,12 +117,13 @@ def run_simulation(nphoton=1e8, geometry=cfg.DEFAULT_GEOMETRY, unitinmm=cfg.VOXE
         "tstart": 0.0,
         "tend": 5e-9,
         "tstep": 5e-9,
-        # Top face (tissue/air, z=0) mismatched so ~49% of photons Fresnel-reflect
-        # back in (fixes bug 3.3); remaining faces absorbing (domain edges, far
-        # from the source/detectors in the simplified slab). VERIFY face order
-        # once pmcxcl actually runs on this machine -- see module docstring.
-        "bc": "aaaaam",
+        "bc": cfg.MCX_BC,
     }
+
+    far_det_x = srcpos[0] + sds_voxels[-1] + det_radius_vox
+    if far_det_x >= nx:
+        raise ValueError(f"Farthest detector (x={far_det_x} vox) lies outside the "
+                          f"{nx}-voxel domain; enlarge the grid or move the source.")
 
     print("\n================== MCX Configuration ==================")
     print(f"  backend       : {_BACKEND_NAME}")
@@ -150,40 +143,24 @@ def run_simulation(nphoton=1e8, geometry=cfg.DEFAULT_GEOMETRY, unitinmm=cfg.VOXE
         return None
 
     print(f"Launching simulation with {nphoton:.1e} photons...")
-    res = _mcx_backend.run(cfg_dict) if hasattr(_mcx_backend, "run") else _mcx_backend.mcxlab(cfg_dict)
+    res = pmcxcl.run(cfg_dict)
     print("Simulation finished.")
 
+    # pmcxcl returns detp raw as (reclen, n_photons), not the named-field dict
+    # that CUDA pmcx's mcxlab() builds. With savedetflag='dpm':
+    # reclen = 1 (detid) + n_media (ppath, grid units) + n_media (momentum
+    # transfer). Layout verified empirically: the mylar/acrylic ppath rows are
+    # exactly zero in the 'simplified' slab, which has no such voxels.
     detp = res["detp"]
+    n_media = (detp.shape[0] - 1) // 2
+    if detp.shape[0] != 1 + 2 * n_media:
+        raise RuntimeError(f"Unexpected detp record length {detp.shape[0]}; "
+                            "expected 1 + 2*n_media (detid + ppath + mom).")
+    detid = detp[0, :]
+    ppath = detp[1:1 + n_media, :].T      # (n_photons, n_media)
+    mom = detp[1 + n_media:1 + 2 * n_media, :].T
 
-    if isinstance(detp, dict):
-        # pmcx (CUDA) mcxlab-style: already parsed into named fields.
-        detid = detp["detid"]
-        ppath = detp["ppath"]
-        if "mom" not in detp:
-            raise RuntimeError(
-                "Momentum transfer ('mom') missing from output. "
-                "Ensure cfg['ismomentum']=1 and savedetflag contains 'm'."
-            )
-        mom = detp["mom"]
-    else:
-        # pmcxcl (OpenCL) raw form: detp is (reclen, n_photons), reclen = 1
-        # (detid) + n_media (ppath) + n_media (mom); here n_media=4 (shallow,
-        # deep, mylar, acrylic) so reclen=9. Empirically verified 2026-09-30:
-        # rows 3-4 (mylar/acrylic ppath) are exactly zero in the 'simplified'
-        # slab geometry, which has no mylar/acrylic voxels -- confirms the
-        # row layout below.
-        n_media = (detp.shape[0] - 1) // 2
-        if detp.shape[0] != 1 + 2 * n_media:
-            raise RuntimeError(f"Unexpected detp record length {detp.shape[0]}; "
-                                "expected 1 + 2*n_media (detid + ppath + mom).")
-        detid = detp[0, :]
-        ppath = detp[1:1 + n_media, :].T      # (n_photons, n_media)
-        mom = detp[1 + n_media:1 + 2 * n_media, :].T
-
-    # ppath/mom columns are 0-indexed by (medium label - 1): col0=medium 1
-    # (shallow), col1=medium 2 (deep). This ordering was empirically verified
-    # in core/code/simulation.py (bug 3.1 fix) and reconfirmed above for the
-    # pmcxcl raw layout.
+    # Columns are indexed by (medium label - 1): col0 = shallow, col1 = deep.
     SHALLOW, DEEP = 0, 1
     processed = {}
     for det_idx in range(1, len(detpos) + 1):

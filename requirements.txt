@@ -2,4 +2,4 @@ numpy
 scipy
 pandas
 matplotlib
-pmcxcl
+# pmcxcl is built from source by scripts/setup_env.sh (PyPI wheel is x86_64-only)

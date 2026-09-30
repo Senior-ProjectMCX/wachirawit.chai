@@ -32,8 +32,9 @@ K0 = 2.0 * np.pi * REFRACTIVE_INDEX_N / WAVELENGTH_MM   # mm^-1
 # PHANTOM GEOMETRY
 # ============================================================
 VOXEL_SIZE_MM = 0.5
-PHANTOM_X_MM = 100.0
+PHANTOM_X_MM = 100.0      # physical phantom outer dimensions ('realistic' geometry)
 PHANTOM_Y_MM = 50.0
+PHANTOM_Z_MM = 50.5
 SHALLOW_DEPTH_MM = 5.5
 DEEP_DEPTH_MM = 35.0
 TOTAL_DEPTH_MM = SHALLOW_DEPTH_MM + DEEP_DEPTH_MM
@@ -43,6 +44,21 @@ TOTAL_DEPTH_MM = SHALLOW_DEPTH_MM + DEEP_DEPTH_MM
 # becomes a 10x-too-thick, over-scattering barrier. The slab model matches
 # the physical dataset better and is what the authors' own MC setup assumes.
 DEFAULT_GEOMETRY = "simplified"
+
+# Slab extent is chosen to approximate a laterally semi-infinite medium: the
+# source sits 40mm from the -x face so the 3cm detector is 50mm from +x.
+# (The 60x60mm slab ported from core/ centred the source, which put the 3cm
+# detector exactly ON the +x domain face -- half its aperture fell outside
+# the grid, the real cause of the low SDS=3cm photon counts.)
+SLAB_X_MM = 120.0
+SLAB_Y_MM = 80.0
+SLAB_Z_MM = 50.0
+SLAB_SOURCE_X_MM = 40.0
+
+# MCX per-face boundary string, faces ordered -x,-y,-z,+x,+y,+z
+# ('a' absorb, 'r' Fresnel reflection, 'm' mirror -- see mcxcl README "--bc").
+# Top face (-z, tissue/air, n=1.37 vs 1.0) is Fresnel; the far faces absorb.
+MCX_BC = "aaraaa"
 
 # ============================================================
 # SOURCE / DETECTOR
@@ -80,7 +96,11 @@ def flow_to_alpha_db(flow, a=DEFAULT_A_MM2_S_PER_FR, db0=DEFAULT_DB0_MM2_S):
 # SEMI-INFINITE HOMOGENEOUS MODEL (BFI fitting / geometry gate)
 # ============================================================
 Z0_MM = 1.0 / MU_SP_MM
-ZB_MM = 1.76 / MU_SP_MM     # extrapolated boundary distance (Wu et al., n=1.37)
+# Extrapolated boundary zb = 2(1+Reff) / (3 mu_s' (1-Reff)), Reff = 0.493 for
+# n=1.37 as stated in the paper. (core/ hard-coded 1.76/mu_s', which matches
+# no stated Reff; the difference moves fitted BFI by only ~2%.)
+R_EFF = 0.493
+ZB_MM = 2.0 * (1.0 + R_EFF) / (3.0 * MU_SP_MM * (1.0 - R_EFF))
 
 # Target layer-sensitivity ratios c2/c1 from Nakabayashi Eq.(10)-(12); the
 # simulated geometry must reproduce these BEFORE any flow->D_B calibration.

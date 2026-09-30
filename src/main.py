@@ -53,20 +53,33 @@ def cmd_validate_geometry(args):
           f"(expect ~0.407/0.494/0.490)")
 
     keep = meta["fr_set_d"] != 0.0 if not args.include_deep_zero else np.ones(meta["n_trials"], bool)
+    fr_s, fr_d = meta["fr_meas_s"][keep], meta["fr_meas_d"][keep]
 
-    gt = bfi_fit.regress_c2c1(meta["bfi"][:, keep], meta["fr_meas_s"][keep], meta["fr_meas_d"][keep])
-    bfi_fit.print_regression("[1] GROUND-TRUTH (physical metadata BFI vs FR_meas):", gt)
+    gt = bfi_fit.regress_c2c1(meta["bfi"][:, keep], fr_s, fr_d)
+    bfi_fit.print_regression("[1] PAPER BFI (metadata) vs FR_meas:", gt)
 
-    if args.synthetic:
-        print(f"\n[2] Fitting BFI from SYNTHETIC g2 ({args.synthetic})...")
-        sim_g2 = data_io.load_synthetic_g2(args.synthetic)
-        flow = data_io.load_flow_table(skip_deep_flow_zero=not args.include_deep_zero)
-        bfi_sim = bfi_fit.fit_bfi_all(sim_g2, beta, tau)
-        res_sim = bfi_fit.regress_c2c1(bfi_sim, flow["fr_meas_s"], flow["fr_meas_d"])
-        bfi_fit.print_regression("    c2/c1 from SYNTHETIC g2 -- THE GEOMETRY GATE:", res_sim)
-        passed = bfi_fit.geometry_gate_passed(res_sim)
-        print(f"\n  Geometry gate: {'PASS' if passed else 'FAIL'} "
-              f"(target c2/c1 = {cfg.TARGET_C2_C1})")
+    if not args.synthetic:
+        return
+
+    # Our semi-infinite fitter reproduces the paper's BFI trends (R~0.99) but
+    # not its absolute per-SDS scale, so the fair gate compares synthetic and
+    # physical curves put through the SAME fitter (as core/code/c2c1_test.py did).
+    print("\n[2] Fitting BFI from PHYSICAL g2 with our fitter (same-fitter reference)...")
+    bfi_phys = bfi_fit.fit_bfi_all(phys_g2[:, :, keep], beta, tau)
+    res_phys = bfi_fit.regress_c2c1(bfi_phys, fr_s, fr_d)
+    bfi_fit.print_regression("    c2/c1 from physical g2, our fitter:", res_phys)
+    phys_ratio = {s: res_phys[s][4] for s in range(3)}
+
+    print(f"\n[3] Fitting BFI from SYNTHETIC g2 ({args.synthetic})...")
+    sim_g2 = data_io.load_synthetic_g2(args.synthetic)
+    flow = data_io.load_flow_table(skip_deep_flow_zero=not args.include_deep_zero)
+    bfi_sim = bfi_fit.fit_bfi_all(sim_g2, beta, tau)
+    res_sim = bfi_fit.regress_c2c1(bfi_sim, flow["fr_meas_s"], flow["fr_meas_d"])
+    bfi_fit.print_regression("    c2/c1 from SYNTHETIC g2 -- THE GEOMETRY GATE:", res_sim,
+                              reference=phys_ratio, ref_label="phys-fit")
+    passed = bfi_fit.geometry_gate_passed(res_sim, target=phys_ratio)
+    print(f"\n  Geometry gate vs same-fitter physical reference: {'PASS' if passed else 'FAIL'}")
+    print(f"  (paper c2/c1 targets for context: {cfg.TARGET_C2_C1})")
 
 
 def cmd_compare(args):
@@ -78,6 +91,8 @@ def cmd_compare(args):
 
 def cmd_all(args):
     cmd_run_mcx(args)
+    if args.dry_run:
+        return
     cmd_generate_dataset(args)
     args.synthetic = args.output
     cmd_validate_geometry(args)
@@ -87,8 +102,6 @@ def cmd_all(args):
 def build_parser():
     p = argparse.ArgumentParser(description="wachirawit.chai DCS two-layer phantom pipeline")
     sub = p.add_subparsers(dest="command", required=True)
-
-    common = dict(type=str)
 
     p_mcx = sub.add_parser("run-mcx", help="Run MCX once to produce pathlengths.npz")
     p_mcx.add_argument("--nphoton", type=float, default=1e8)
@@ -142,6 +155,7 @@ def build_parser():
 
 
 def main():
+    sys.stdout.reconfigure(line_buffering=True)
     parser = build_parser()
     args = parser.parse_args()
     args.func(args)
