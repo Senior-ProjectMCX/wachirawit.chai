@@ -1,0 +1,10 @@
+.venv/
+.venv_x86/
+__pycache__/
+*.pyc
+.DS_Store
+
+# Generated pipeline outputs (regenerable from src/, not source)
+data/*.npz
+plots/*.png
+plots/*.pdf
