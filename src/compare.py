@@ -39,6 +39,7 @@ import data_io
 from dcs_physics import calculate_g2
 
 CAL_TAU_STRIDE = 5    # calibrate on every 5th tau point (101 of 501) for speed
+BFI_MM2S_TO_FILE = 1e7   # fitter returns mm^2/s; metadata.csv BFI is in 1e-9 cm^2/s
 
 
 def _combo_split(fr_s, fr_d, test_frac=0.30, seed=0):
@@ -66,6 +67,26 @@ def _synth_curves(det, fr_s, fr_d, beta, tau, trials, a, db0):
         for s in range(3):
             Ls, Ld, Ys, Yd = det[s]
             out[s, :, j] = calculate_g2(Ls, Ld, Ys, Yd, aDB_s, aDB_d, tau, beta[s])
+    return out
+
+
+def _flow_bin_breakdown(sim, ref, fr_s, fr_d):
+    """Per-trial R^2 (median) and pooled RMSE for low/high shallow x low/high deep
+    flow, split at the median FR_meas of each layer."""
+    s_hi, d_hi = fr_s > np.median(fr_s), fr_d > np.median(fr_d)
+    out = {}
+    for sname, smask in (("shallow-low", ~s_hi), ("shallow-high", s_hi)):
+        for dname, dmask in (("deep-low", ~d_hi), ("deep-high", d_hi)):
+            idx = np.where(smask & dmask)[0]
+            if len(idx) == 0:
+                continue
+            out[f"{sname}/{dname}"] = {
+                "n": int(len(idx)),
+                "r2_per_trial_median": [float(np.median([_r2(sim[s][:, j], ref[s][:, j]) for j in idx]))
+                                        for s in range(sim.shape[0])],
+                "rmse": [float(np.sqrt(np.mean((sim[s][:, idx] - ref[s][:, idx]) ** 2)))
+                         for s in range(sim.shape[0])],
+            }
     return out
 
 
@@ -134,34 +155,68 @@ def run_comparison(pathlengths_path, plot_output_path, metrics_output_path="plot
     bfi_sim = bfi_fit.fit_bfi_all(sim_test, beta, tau)
     bfi_phys = bfi_fit.fit_bfi_all(ref_test, beta, tau)
 
+    # Reference definitions (see plan 2026-10-07):
+    #   input to sim   = FR_meas (what actually flowed)
+    #   g2 reference   = physical g2 of the SAME trial
+    #   split grouping = FR_set preset combo
+    #   BFI-A          = sim BFI vs physical-g2 BFI, same fitter (isolates sim error)
+    #   BFI-B          = sim BFI vs BFI column in metadata.csv (lab/paper fitter; the
+    #                    absolute scale differs per SDS, see bfi_fit_vs_file_ratio)
+    bfi_file = meta["bfi"][:, test_idx]            # 1e-9 cm^2/s
+    bfi_sim_file_units = bfi_sim * BFI_MM2S_TO_FILE
+    bfi_phys_file_units = bfi_phys * BFI_MM2S_TO_FILE
+
     per_sds = []
     per_trial_mae = np.zeros((3, len(test_idx)))
     print("\n================= Held-out (TEST) metrics =================")
     for s in range(3):
         diff = sim_test[s] - ref_test[s]
         per_trial_r2 = [_r2(sim_test[s][:, j], ref_test[s][:, j]) for j in range(len(test_idx))]
+        per_trial_rmse = np.sqrt(np.mean(diff ** 2, axis=0))
         per_trial_mae[s] = np.mean(np.abs(diff), axis=0)
         row = {
             "sds": data_io.SDS_LABELS[s],
-            "r2_pooled": float(_r2(sim_test[s], ref_test[s])),
-            "r2_per_trial_median": float(np.median(per_trial_r2)),
-            "mae": float(np.mean(np.abs(diff))),
             "rmse": float(np.sqrt(np.mean(diff ** 2))),
-            "bfi_pearson_r": float(np.corrcoef(bfi_sim[s], bfi_phys[s])[0, 1]),
-            "bfi_median_ratio_sim_over_phys": float(np.median(bfi_sim[s] / bfi_phys[s])),
+            "rmse_per_trial_median": float(np.median(per_trial_rmse)),
+            "r2_per_trial_median": float(np.median(per_trial_r2)),
+            "r2_pooled": float(_r2(sim_test[s], ref_test[s])),
+            "bfi_A_pearson_r": float(np.corrcoef(bfi_sim[s], bfi_phys[s])[0, 1]),
+            "bfi_A_median_ratio_sim_over_phys": float(np.median(bfi_sim[s] / bfi_phys[s])),
+            "bfi_A_rmse_1e-9cm2s": float(np.sqrt(np.mean((bfi_sim_file_units[s] - bfi_phys_file_units[s]) ** 2))),
+            "bfi_B_pearson_r": float(np.corrcoef(bfi_sim_file_units[s], bfi_file[s])[0, 1]),
+            "bfi_B_median_ratio_sim_over_file": float(np.median(bfi_sim_file_units[s] / bfi_file[s])),
+            "bfi_B_rmse_1e-9cm2s": float(np.sqrt(np.mean((bfi_sim_file_units[s] - bfi_file[s]) ** 2))),
+            "bfi_fit_vs_file_ratio": float(np.median(bfi_phys_file_units[s] / bfi_file[s])),
         }
         per_sds.append(row)
-        print(f"  SDS {row['sds']}: R2 pooled={row['r2_pooled']:.4f}  "
-              f"R2 per-trial median={row['r2_per_trial_median']:.4f}  "
-              f"MAE={row['mae']:.5f}  RMSE={row['rmse']:.5f}  |  "
-              f"BFI R={row['bfi_pearson_r']:.4f}  ratio={row['bfi_median_ratio_sim_over_phys']:.3f}")
-    print("  (target: R^2 >= 0.95)")
+
+    print(f"{'SDS':<5}{'RMSE':>9}{'RMSE/trial':>12}{'R2/trial':>10}{'R2 pooled':>11}"
+          f"{'BFI-A R':>10}{'A ratio':>9}{'BFI-B R':>10}{'B ratio':>9}")
+    for r in per_sds:
+        print(f"{r['sds']:<5}{r['rmse']:>9.4f}{r['rmse_per_trial_median']:>12.4f}"
+              f"{r['r2_per_trial_median']:>10.4f}{r['r2_pooled']:>11.4f}"
+              f"{r['bfi_A_pearson_r']:>10.4f}{r['bfi_A_median_ratio_sim_over_phys']:>9.3f}"
+              f"{r['bfi_B_pearson_r']:>10.4f}{r['bfi_B_median_ratio_sim_over_file']:>9.3f}")
+    print("  (target: R^2 >= 0.95)   BFI-A = sim vs physical g2, same fitter;  "
+          "BFI-B = sim vs BFI column in metadata.csv")
+    print("  our fitter on PHYSICAL g2 vs file BFI (should be ~1 if fitters agree): "
+          + "  ".join(f"{r['sds']}={r['bfi_fit_vs_file_ratio']:.3f}" for r in per_sds))
+
+    flow_bins = _flow_bin_breakdown(sim_test, ref_test, fr_s[test_idx], fr_d[test_idx])
+    print("\nBy flow condition (test trials; low/high split at median of each layer's FR_meas):")
+    for name, vals in flow_bins.items():
+        print(f"  {name:<22} n={vals['n']:<4} " + "  ".join(
+            f"{lbl}: R2={vals['r2_per_trial_median'][k]:.3f} RMSE={vals['rmse'][k]:.4f}"
+            for k, lbl in enumerate(data_io.SDS_LABELS)))
     print("===========================================================")
 
     metrics = {"a_mm2_s_per_fr": a_star, "db0_mm2_s": db0_star,
                "n_train": int(len(train_idx)), "n_test": int(len(test_idx)),
                "n_preset_combos": int(n_combos), "cal_photons_per_sds": cal_max_photons,
-               "per_sds": per_sds}
+               "definitions": {"sim_input": "FR_meas", "g2_reference": "physical g2, same trial",
+                               "split_group": "FR_set preset combo",
+                               "bfi_units": "1e-9 cm^2/s"},
+               "per_sds": per_sds, "by_flow_condition": flow_bins}
     os.makedirs(os.path.dirname(metrics_json_path) or ".", exist_ok=True)
     with open(metrics_json_path, "w") as f:
         json.dump(metrics, f, indent=2)

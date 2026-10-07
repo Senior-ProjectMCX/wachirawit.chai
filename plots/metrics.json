@@ -5,33 +5,108 @@
   "n_test": 320,
   "n_preset_combos": 108,
   "cal_photons_per_sds": 5000,
+  "definitions": {
+    "sim_input": "FR_meas",
+    "g2_reference": "physical g2, same trial",
+    "split_group": "FR_set preset combo",
+    "bfi_units": "1e-9 cm^2/s"
+  },
   "per_sds": [
     {
       "sds": "1cm",
-      "r2_pooled": 0.8257037041847621,
-      "r2_per_trial_median": 0.9509038475654354,
-      "mae": 0.024745609241102504,
       "rmse": 0.042178467967630716,
-      "bfi_pearson_r": 0.9647546008180897,
-      "bfi_median_ratio_sim_over_phys": 0.7479788957481825
+      "rmse_per_trial_median": 0.017924123387068773,
+      "r2_per_trial_median": 0.9509038475654354,
+      "r2_pooled": 0.8257037041847621,
+      "bfi_A_pearson_r": 0.9647546008180897,
+      "bfi_A_median_ratio_sim_over_phys": 0.7479788957481825,
+      "bfi_A_rmse_1e-9cm2s": 21.117307368858707,
+      "bfi_B_pearson_r": 0.9648505723361532,
+      "bfi_B_median_ratio_sim_over_file": 1.4147253498440346,
+      "bfi_B_rmse_1e-9cm2s": 7.817490910976799,
+      "bfi_fit_vs_file_ratio": 1.9803054143281138
     },
     {
       "sds": "2cm",
-      "r2_pooled": 0.9262693017473791,
-      "r2_per_trial_median": 0.961506029827793,
-      "mae": 0.01763676794945251,
       "rmse": 0.02886022245917733,
-      "bfi_pearson_r": 0.9153757420640531,
-      "bfi_median_ratio_sim_over_phys": 1.0423164732985195
+      "rmse_per_trial_median": 0.01736975147290961,
+      "r2_per_trial_median": 0.961506029827793,
+      "r2_pooled": 0.9262693017473791,
+      "bfi_A_pearson_r": 0.9153757420640531,
+      "bfi_A_median_ratio_sim_over_phys": 1.0423164732985195,
+      "bfi_A_rmse_1e-9cm2s": 8.54487355479792,
+      "bfi_B_pearson_r": 0.9239737663755355,
+      "bfi_B_median_ratio_sim_over_file": 0.9263852782038194,
+      "bfi_B_rmse_1e-9cm2s": 12.521929859799956,
+      "bfi_fit_vs_file_ratio": 0.900518059862892
     },
     {
       "sds": "3cm",
-      "r2_pooled": 0.8823784146842989,
-      "r2_per_trial_median": 0.9175474188348796,
-      "mae": 0.02067313775018216,
       "rmse": 0.03210261685535246,
-      "bfi_pearson_r": 0.926932110679811,
-      "bfi_median_ratio_sim_over_phys": 1.175128525376219
+      "rmse_per_trial_median": 0.023679261455737472,
+      "r2_per_trial_median": 0.9175474188348796,
+      "r2_pooled": 0.8823784146842989,
+      "bfi_A_pearson_r": 0.926932110679811,
+      "bfi_A_median_ratio_sim_over_phys": 1.175128525376219,
+      "bfi_A_rmse_1e-9cm2s": 6.866247120512324,
+      "bfi_B_pearson_r": 0.9415751502431287,
+      "bfi_B_median_ratio_sim_over_file": 0.597112918802361,
+      "bfi_B_rmse_1e-9cm2s": 30.30292252622052,
+      "bfi_fit_vs_file_ratio": 0.5224129798024846
     }
-  ]
+  ],
+  "by_flow_condition": {
+    "shallow-low/deep-low": {
+      "n": 100,
+      "r2_per_trial_median": [
+        0.9856665950503618,
+        0.9302756890527286,
+        0.8955770753987157
+      ],
+      "rmse": [
+        0.020901943127059633,
+        0.03171214046307368,
+        0.044957420256467075
+      ]
+    },
+    "shallow-low/deep-high": {
+      "n": 60,
+      "r2_per_trial_median": [
+        -0.20967387320359332,
+        0.739400709355361,
+        0.9319589602383611
+      ],
+      "rmse": [
+        0.08704682796457759,
+        0.04640353316390696,
+        0.021917509840360935
+      ]
+    },
+    "shallow-high/deep-low": {
+      "n": 60,
+      "r2_per_trial_median": [
+        0.9196263233873478,
+        0.9647168602700795,
+        0.8526888637716152
+      ],
+      "rmse": [
+        0.02498524701413671,
+        0.020162816778631527,
+        0.030276739611579662
+      ]
+    },
+    "shallow-high/deep-high": {
+      "n": 100,
+      "r2_per_trial_median": [
+        0.9513944710771576,
+        0.9826075836116995,
+        0.9261812094082542
+      ],
+      "rmse": [
+        0.01830669794338917,
+        0.011124914120254986,
+        0.020939080044131992
+      ]
+    }
+  }
 }
