@@ -1,0 +1,47 @@
+{
+  "a_mm2_s_per_fr": 9.39641479019161e-08,
+  "db0_mm2_s": 7.010919184987023e-07,
+  "n_combos": 108,
+  "n_trials": 108,
+  "per_sds": [
+    {
+      "sds": "1cm",
+      "n_trials": 108,
+      "rmse": 0.03291797453306335,
+      "r2_per_trial_median": 0.9503461372336751,
+      "r2_pooled": 0.892830686563634,
+      "bfi_A_pearson_r": 0.9669196468729605,
+      "bfi_A_median_ratio": 0.7551190651346682,
+      "bfi_A_rmse": 22.06812806314361,
+      "bfi_B_pearson_r": 0.9635704664499194,
+      "bfi_B_median_ratio": 1.4622761020509891,
+      "our_fitter_vs_file_ratio": 1.96137163462833
+    },
+    {
+      "sds": "2cm",
+      "n_trials": 108,
+      "rmse": 0.023873414044545186,
+      "r2_per_trial_median": 0.9649334079009003,
+      "r2_pooled": 0.9497630057759193,
+      "bfi_A_pearson_r": 0.9265933146979215,
+      "bfi_A_median_ratio": 1.0745323563933873,
+      "bfi_A_rmse": 8.172772983234843,
+      "bfi_B_pearson_r": 0.928950731381682,
+      "bfi_B_median_ratio": 0.9428249742247812,
+      "our_fitter_vs_file_ratio": 0.8905049123283912
+    },
+    {
+      "sds": "3cm",
+      "n_trials": 108,
+      "rmse": 0.031229391122907544,
+      "r2_per_trial_median": 0.9166023735126596,
+      "r2_pooled": 0.892757260109128,
+      "bfi_A_pearson_r": 0.933117594531226,
+      "bfi_A_median_ratio": 1.191088925978363,
+      "bfi_A_rmse": 6.601622029037259,
+      "bfi_B_pearson_r": 0.9261501638751805,
+      "bfi_B_median_ratio": 0.6111929845599523,
+      "our_fitter_vs_file_ratio": 0.5198117641226618
+    }
+  ]
+}

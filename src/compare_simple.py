@@ -21,6 +21,8 @@ Steps, each tied to Nakabayashi et al. (2023, BOE 14(10) 5358) where the paper d
 Deep-flow == 0 trials (including (0,0)) are excluded, per Goal.md.
 
 Usage:  .venv/bin/python src/compare_simple.py [--per-combo 5]   (0 = every trial)
+        .venv/bin/python src/compare_simple.py --testset dataset/testset_closest.csv
+                (one trial per condition, closest measured flow to the preset)
 """
 import argparse
 import json
@@ -28,6 +30,7 @@ import os
 import sys
 
 import numpy as np
+import pandas as pd
 from scipy.optimize import minimize
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -37,7 +40,7 @@ import data_io
 from compare import _synth_curves, _r2, CAL_TAU_STRIDE, BFI_MM2S_TO_FILE
 
 
-def run(pathlengths_path, per_combo, seed, out_json):
+def run(pathlengths_path, per_combo, seed, out_json, testset=None):
     meta = data_io.load_physical_metadata()
     phys_g2 = data_io.load_physical_g2()
     beta = data_io.extract_beta(phys_g2)
@@ -56,6 +59,12 @@ def run(pathlengths_path, per_combo, seed, out_json):
             idxs = rng.choice(idxs, per_combo, replace=False)
         trials.extend(idxs.tolist())
     trials = np.array(sorted(trials))
+    if testset:
+        # one pre-selected trial per condition (scripts/make_testset.py): use it both to
+        # calibrate and to evaluate
+        trials = np.sort(pd.read_csv(testset)["Trial_Index"].to_numpy(int))
+        assert np.all(meta["fr_set_d"][trials] != 0.0), "test set contains Deep_Flow==0 rows"
+        print(f"using test set {testset}")
     print(f"{len(combos)} preset combos, {len(trials)} trials evaluated "
           f"(Deep_Flow==0 excluded: {meta['n_trials'] - len(keep)} trials)")
 
@@ -64,7 +73,7 @@ def run(pathlengths_path, per_combo, seed, out_json):
     det = {s: data_io.downsample_detector(pl, s + 1, 5000, drng) for s in range(3)}
 
     # --- 2. calibrate (a, D_B0) once, on one representative trial per combo ---
-    cal_trials = np.array([min(v) for v in combos.values()])
+    cal_trials = trials if testset else np.array([min(v) for v in combos.values()])
     tau_cal = tau[::CAL_TAU_STRIDE]
     ref_cal = phys_g2[:, ::CAL_TAU_STRIDE, :][:, :, cal_trials]
 
@@ -129,9 +138,14 @@ def main():
     ap.add_argument("--pathlengths", default=os.path.join(root, "data", "pathlengths.npz"))
     ap.add_argument("--per-combo", type=int, default=5, help="trials per preset combo; 0 = all")
     ap.add_argument("--seed", type=int, default=0)
-    ap.add_argument("--out", default=os.path.join(root, "plots", "metrics_simple.json"))
+    ap.add_argument("--testset", default=None,
+                    help="CSV with a Trial_Index column (e.g. dataset/testset_closest.csv); "
+                         "calibrate and evaluate on those trials only")
+    ap.add_argument("--out", default=None)
     args = ap.parse_args()
-    run(args.pathlengths, args.per_combo, args.seed, args.out)
+    out = args.out or os.path.join(root, "plots",
+                                   "metrics_simple_testset.json" if args.testset else "metrics_simple.json")
+    run(args.pathlengths, args.per_combo, args.seed, out, args.testset)
 
 
 if __name__ == "__main__":
