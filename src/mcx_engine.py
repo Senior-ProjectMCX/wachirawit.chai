@@ -49,7 +49,7 @@ def create_voxel_grid(geometry=cfg.DEFAULT_GEOMETRY, unitinmm=cfg.VOXEL_SIZE_MM)
         nz = int(cfg.SLAB_Z_MM / unitinmm)
         vol = np.zeros((nx, ny, nz), dtype=np.uint8)
 
-        z_shallow_end = int(cfg.SHALLOW_DEPTH_MM / unitinmm)
+        z_shallow_end = int(round(cfg.MC_SHALLOW_DEPTH_MM / unitinmm))
         vol[:, :, :z_shallow_end] = 1
         vol[:, :, z_shallow_end:] = 2
 
@@ -80,7 +80,17 @@ def create_voxel_grid(geometry=cfg.DEFAULT_GEOMETRY, unitinmm=cfg.VOXEL_SIZE_MM)
 
 
 def run_simulation(nphoton=1e8, geometry=cfg.DEFAULT_GEOMETRY, unitinmm=cfg.VOXEL_SIZE_MM,
-                    dry_run=False):
+                    dry_run=False, srctype="pencil", src_half_angle_rad=0.0, save_exit_dir=False,
+                    n_ring=1):
+    """
+    srctype='pencil' (default) or 'cone' (uniform cone of half-angle src_half_angle_rad,
+    e.g. cfg.SOURCE_HALF_ANGLE_RAD for the real FT400EMT source fibre).
+    save_exit_dir=True also stores each detected photon's exit direction, returned as
+    det_k_cos = cos(angle to the surface normal), so a fibre-NA filter can be applied later.
+    n_ring>1 places n_ring detectors evenly on a circle at each SDS around a centred source and
+    pools them per SDS. The slab is laterally uniform, so every point at the same distance sees
+    the same physics; this multiplies the detected-photon count (needed with a narrow-NA filter).
+    """
     print(f"[{_BACKEND_NAME}] Setting up '{geometry}' geometry voxel grid...")
     vol = create_voxel_grid(geometry, unitinmm)
     print(f"Voxel grid shape: {vol.shape}")
@@ -94,12 +104,14 @@ def run_simulation(nphoton=1e8, geometry=cfg.DEFAULT_GEOMETRY, unitinmm=cfg.VOXE
     ]
 
     nx, ny, nz = vol.shape
-    src_x = cfg.SLAB_SOURCE_X_MM / unitinmm if geometry == "simplified" else nx / 2.0
+    src_x = cfg.SLAB_SOURCE_X_MM / unitinmm if (geometry == "simplified" and n_ring == 1) else nx / 2.0
     srcpos = [src_x, ny / 2.0, 0.0]
 
     sds_voxels = [int(round(d / unitinmm)) for d in cfg.SDS_MM]
     det_radius_vox = cfg.DET_RADIUS_MM / unitinmm
-    detpos = [[srcpos[0] + sds, srcpos[1], 0.0, det_radius_vox] for sds in sds_voxels]
+    angles = 2.0 * np.pi * np.arange(n_ring) / n_ring
+    detpos = [[srcpos[0] + sds * np.cos(t), srcpos[1] + sds * np.sin(t), 0.0, det_radius_vox]
+              for sds in sds_voxels for t in angles]   # ids: SDS k -> (k-1)*n_ring+1 .. k*n_ring
 
     cfg_dict = {
         "nphoton": int(nphoton),
@@ -107,10 +119,11 @@ def run_simulation(nphoton=1e8, geometry=cfg.DEFAULT_GEOMETRY, unitinmm=cfg.VOXE
         "prop": prop,
         "srcpos": srcpos,
         "srcdir": [0.0, 0.0, 1.0],
-        "srctype": "pencil",
+        "srctype": srctype,
+        "srcparam1": [float(src_half_angle_rad), 0.0, 0.0, 0.0],
         "detpos": detpos,
         "issavedet": 1,
-        "savedetflag": "dpm",     # detector id, partial pathlength, momentum transfer
+        "savedetflag": "dpmv" if save_exit_dir else "dpm",   # det id, pathlength, momentum (+exit dir)
         "ismomentum": 1,
         "maxdetphoton": 5_000_000,
         "unitinmm": unitinmm,
@@ -120,10 +133,10 @@ def run_simulation(nphoton=1e8, geometry=cfg.DEFAULT_GEOMETRY, unitinmm=cfg.VOXE
         "bc": cfg.MCX_BC,
     }
 
-    far_det_x = srcpos[0] + sds_voxels[-1] + det_radius_vox
-    if far_det_x >= nx:
-        raise ValueError(f"Farthest detector (x={far_det_x} vox) lies outside the "
-                          f"{nx}-voxel domain; enlarge the grid or move the source.")
+    for d in detpos:
+        if not (d[3] <= d[0] <= nx - d[3] and d[3] <= d[1] <= ny - d[3]):
+            raise ValueError(f"Detector at ({d[0]:.1f}, {d[1]:.1f}) vox lies outside the "
+                             f"{nx}x{ny}-voxel domain; enlarge the grid or move the source.")
 
     print("\n================== MCX Configuration ==================")
     print(f"  backend       : {_BACKEND_NAME}")
@@ -132,7 +145,8 @@ def run_simulation(nphoton=1e8, geometry=cfg.DEFAULT_GEOMETRY, unitinmm=cfg.VOXE
     print("  media (prop)  : mua, mus, g, n")
     for i, p in enumerate(prop):
         print(f"    [{i}] {p}")
-    print(f"  srcpos (vox)  : {srcpos}   srcdir: {cfg_dict['srcdir']}   srctype: {cfg_dict['srctype']}")
+    print(f"  srcpos (vox)  : {srcpos}   srcdir: {cfg_dict['srcdir']}   srctype: {cfg_dict['srctype']}"
+          f"   srcparam1: {cfg_dict['srcparam1']}")
     print(f"  detpos (vox)  : {detpos}   (SDS = 1, 2, 3 cm)")
     print(f"  nphoton       : {int(nphoton):.1e}")
     print(f"  bc            : {cfg_dict['bc']}")
@@ -152,19 +166,21 @@ def run_simulation(nphoton=1e8, geometry=cfg.DEFAULT_GEOMETRY, unitinmm=cfg.VOXE
     # transfer). Layout verified empirically: the mylar/acrylic ppath rows are
     # exactly zero in the 'simplified' slab, which has no such voxels.
     detp = res["detp"]
-    n_media = (detp.shape[0] - 1) // 2
-    if detp.shape[0] != 1 + 2 * n_media:
+    n_media = len(prop) - 1
+    n_dir = 3 if save_exit_dir else 0
+    if detp.shape[0] != 1 + 2 * n_media + n_dir:
         raise RuntimeError(f"Unexpected detp record length {detp.shape[0]}; "
-                            "expected 1 + 2*n_media (detid + ppath + mom).")
+                            f"expected 1 + 2*{n_media} (+{n_dir} exit dir).")
     detid = detp[0, :]
     ppath = detp[1:1 + n_media, :].T      # (n_photons, n_media)
     mom = detp[1 + n_media:1 + 2 * n_media, :].T
+    exit_dir = detp[1 + 2 * n_media:1 + 2 * n_media + 3, :].T if save_exit_dir else None
 
     # Columns are indexed by (medium label - 1): col0 = shallow, col1 = deep.
     SHALLOW, DEEP = 0, 1
     processed = {}
-    for det_idx in range(1, len(detpos) + 1):
-        idx = (detid == det_idx)
+    for det_idx in range(1, len(sds_voxels) + 1):
+        idx = ((detid - 1) // n_ring + 1 == det_idx)
         Ls = ppath[idx, SHALLOW] * unitinmm
         Ld = ppath[idx, DEEP] * unitinmm
         Ys = mom[idx, SHALLOW]
@@ -177,6 +193,9 @@ def run_simulation(nphoton=1e8, geometry=cfg.DEFAULT_GEOMETRY, unitinmm=cfg.VOXE
         processed[f"det_{det_idx}_Ld"] = Ld.astype(np.float32)
         processed[f"det_{det_idx}_Ys"] = Ys.astype(np.float32)
         processed[f"det_{det_idx}_Yd"] = Yd.astype(np.float32)
+        if save_exit_dir:
+            # photons leave through the top (-z) face: angle to the normal from |v_z|
+            processed[f"det_{det_idx}_cos"] = np.abs(exit_dir[idx, 2]).astype(np.float32)
 
     return processed
 

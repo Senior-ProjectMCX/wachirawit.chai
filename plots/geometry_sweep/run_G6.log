@@ -1,0 +1,72 @@
+please first install pmcx module to use utility functions such as 'detweight', 'meanpath' etc
+[pmcxcl] Setting up 'simplified' geometry voxel grid...
+Voxel grid shape: (240, 160, 98)
+
+================== MCX Configuration ==================
+  backend       : pmcxcl
+  geometry      : simplified
+  voxel shape   : (240, 160, 98)  (unitinmm=0.5 mm)
+  media (prop)  : mua, mus, g, n
+    [0] [0.0, 0.0, 1.0, 1.0]
+    [1] [0.05600000000000001, 4.372727272727273, 0.89, 1.37]
+    [2] [0.05600000000000001, 4.372727272727273, 0.89, 1.37]
+    [3] [0.01, 10.0, 0.9, 1.64]
+    [4] [0.005, 0.0, 1.0, 1.49]
+  srcpos (vox)  : [120.0, 80.0, 0.0]   srcdir: [0.0, 0.0, 1.0]   srctype: pencil   srcparam1: [0.0, 0.0, 0.0, 0.0]
+  detpos (vox)  : [[np.float64(140.0), np.float64(80.0), 0.0, 2.0], [np.float64(134.14213562373095), np.float64(94.14213562373095), 0.0, 2.0], [np.float64(120.0), np.float64(100.0), 0.0, 2.0], [np.float64(105.85786437626905), np.float64(94.14213562373095), 0.0, 2.0], [np.float64(100.0), np.float64(80.0), 0.0, 2.0], [np.float64(105.85786437626905), np.float64(65.85786437626905), 0.0, 2.0], [np.float64(120.0), np.float64(60.0), 0.0, 2.0], [np.float64(134.14213562373095), np.float64(65.85786437626905), 0.0, 2.0], [np.float64(160.0), np.float64(80.0), 0.0, 2.0], [np.float64(148.2842712474619), np.float64(108.2842712474619), 0.0, 2.0], [np.float64(120.0), np.float64(120.0), 0.0, 2.0], [np.float64(91.7157287525381), np.float64(108.2842712474619), 0.0, 2.0], [np.float64(80.0), np.float64(80.0), 0.0, 2.0], [np.float64(91.7157287525381), np.float64(51.7157287525381), 0.0, 2.0], [np.float64(119.99999999999999), np.float64(40.0), 0.0, 2.0], [np.float64(148.2842712474619), np.float64(51.71572875253809), 0.0, 2.0], [np.float64(180.0), np.float64(80.0), 0.0, 2.0], [np.float64(162.42640687119285), np.float64(122.42640687119285), 0.0, 2.0], [np.float64(120.0), np.float64(140.0), 0.0, 2.0], [np.float64(77.57359312880715), np.float64(122.42640687119285), 0.0, 2.0], [np.float64(60.0), np.float64(80.00000000000001), 0.0, 2.0], [np.float64(77.57359312880715), np.float64(37.573593128807154), 0.0, 2.0], [np.float64(119.99999999999999), np.float64(20.0), 0.0, 2.0], [np.float64(162.42640687119285), np.float64(37.57359312880714), 0.0, 2.0]]   (SDS = 1, 2, 3 cm)
+  nphoton       : 4.0e+08
+  bc            : aaraaa
+======================================================
+
+Launching simulation with 4.0e+08 photons...
+nphoton: 4e+08
+tstart: 0
+tstep: 5e-09
+tend: 5e-09
+maxdetphoton: 5e+06
+unitinmm: 0.5
+ismomentum: 1
+issavedet: 1
+==============================================================================
+=                       Monte Carlo eXtreme (MCX) -- OpenCL                  =
+=          Copyright (c) 2010-2025 Qianqian Fang <q.fang at neu.edu>         =
+=                https://mcx.space/  &  https://neurojson.io                 =
+=                                                                            =
+= Computational Optics&Translational Imaging (COTI) Lab - http://fanglab.org =
+=   Department of Bioengineering, Northeastern University, Boston, MA, USA   =
+==============================================================================
+=    The MCX Project is funded by the NIH/NIGMS under grant R01-GM114365     =
+==============================================================================
+= Open-source codes and reusable scientific data are essential for research, =
+= MCX proudly developed human-readable JSON-based data formats for easy reuse=
+=                                                                            =
+=Please visit our free scientific data sharing portal at https://neurojson.io=
+= and consider sharing your public datasets in standardized JSON/JData format=
+==============================================================================
+$Rev::4fdc45$v2025.10$Date::2018-03-29 00:35:53 -04$by $Author::Qianqian Fang$
+==============================================================================
+- code name: [Infinity] compiled with OpenCL [1] on [Sep 30 2026]
+- compiled with: [RNG] xoroshiro128+ [seed length] 4
+initializing streams ...	init complete : 0 ms
+building kernel with option: -cl-mad-enable -DMCX_USE_NATIVE -DMCX_SIMPLIFY_BRANCH -DMCX_VECTOR_INDEX -DUSE_MACRO_CONST -DMCX_SRC_PENCIL -DMED_TYPE=1  -DUSE_ATOMIC -DMCX_SAVE_DETECTORS  -Dgcfgdetnum=24  -Dgcfgdoreflect=1  -Dgcfggscatter=1000000000  -Dgcfgis2d=0  -Dgcfgissaveref=0  -Dgcfgissaveseed=0  -Dgcfgisspecular=0  -Dgcfgmaxdetphoton=5000000  -Dgcfgmaxgate=1  -Dgcfgmaxjumpdebug=10000000  -Dgcfgmaxmedia=4  -Dgcfgmaxvoidstep=1000  -Dgcfgmediaformat=1  -Dgcfgminaccumtime=8.3391025205e-13f  -Dgcfgminenergy=0.0000000000e+00f  -Dgcfgoneoverc0=1.6678205041e-12f  -Dgcfgoutputtype=0  -Dgcfgpartialdata=8  -Dgcfgreclen=12  -Dgcfgsave2pt=1  -Dgcfgsavedet=1  -Dgcfgsavedetflag=45  -Dgcfgseed=1648335518  -Dgcfgsrcnum=1  -Dgcfgvoidtime=1  -Dgcfgw0offset=12  -Dgcfgnphase=0  -Dgcfgnangle=0  -Dgcfgnanglelen=0  -Dgcfgnphaselen=0  -Dgcfgextrasrclen=0  -DgcfgRtstep=2.0000000000e+08f  -Dgcfgmaxpolmedia=0  -Dgcfgomega=0.0000000000e+00f  -Dgcfgistrajstokes=0  -Dgcfgdebuglevel=0  -Dgcfgreplaydet=0  -Dgcfgsrcid=0  -DMCX_DO_REFLECTION
+build program complete : 3 ms
+- [device 0(1): Apple M4] threadph=55803 extra=4096 np=400000000 nthread=7168 nblock=64 sharedbuf=3328
+set kernel arguments complete : 3 ms
+launching MCX simulation for time window [0.0ns 5.0ns] ...
+simulation run# 1 ... 
+kernel complete:  	421118 ms
+retrieving fields ... 	detected 4578453 photons, total: 4578453	transfer complete:	421174 ms
+normalizing raw data ...	source 1, normalization factor alpha=2.000000
+simulated 400000000 photons (400000000) with 1 devices (repeat x1)
+MCX simulation speed: 949.86 photon/ms
+total simulated energy: 400000000.00	absorbed: 75.41610%
+(loss due to initial specular reflection is excluded in the total)
+Simulation finished.
+Detector 1 (SDS 1cm): 3723048 photons captured, mean Ls=35.38mm Ld=44.42mm
+Detector 2 (SDS 2cm): 664358 photons captured, mean Ls=53.25mm Ld=139.19mm
+Detector 3 (SDS 3cm): 191047 photons captured, mean Ls=61.66mm Ld=244.62mm
+[G6] MCX 4.0e+08 photons in 424s -> /Users/wc/Documents/project/wachirawit.chai/data/geom_G6.npz
+[G6] photons per SDS: {'1cm': {'detected': 3723048, 'used': 57023, 'after_na': 57023}, '2cm': {'detected': 664358, 'used': 10300, 'after_na': 10300}, '3cm': {'detected': 191047, 'used': 2957, 'after_na': 2957}}
+[G6] 1cm: RMSE=0.0295 R2/trial=0.943 BFI-A R=0.965 ratio=0.76 | c2/c1 sim=0.116 phys=0.117 paper=0.140
+[G6] 2cm: RMSE=0.0199 R2/trial=0.974 BFI-A R=0.940 ratio=1.04 | c2/c1 sim=0.302 phys=0.444 paper=0.385
+[G6] 3cm: RMSE=0.0325 R2/trial=0.913 BFI-A R=0.921 ratio=1.23 | c2/c1 sim=0.741 phys=0.458 paper=0.459

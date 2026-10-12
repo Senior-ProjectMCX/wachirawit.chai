@@ -35,7 +35,13 @@ VOXEL_SIZE_MM = 0.5
 PHANTOM_X_MM = 100.0      # physical phantom outer dimensions ('realistic' geometry)
 PHANTOM_Y_MM = 50.0
 PHANTOM_Z_MM = 50.5
-SHALLOW_DEPTH_MM = 5.5
+SHALLOW_DEPTH_MM = 5.5      # physical phantom (Nakabayashi Sec. 2.1); used by 'realistic'
+# Shallow-layer thickness used in the 'simplified' MC slab. Chosen 2026-10-13 by a grid
+# search inside the paper's own +-1 mm robustness range (Sec. 2.4.3; method as in Wu et al.
+# 2021): 4.5 mm gave the best g2 R2/RMSE at 2-3 cm and moved c2/c1 toward the physical data
+# (Obsidian "Geometry Optimization Research", scripts/geometry_sweep.py run G5a).
+# It is a fitted effective value, not a measured one.
+MC_SHALLOW_DEPTH_MM = 4.5
 DEEP_DEPTH_MM = 35.0
 TOTAL_DEPTH_MM = SHALLOW_DEPTH_MM + DEEP_DEPTH_MM
 
@@ -52,7 +58,7 @@ DEFAULT_GEOMETRY = "simplified"
 # the grid, the real cause of the low SDS=3cm photon counts.)
 SLAB_X_MM = 120.0
 SLAB_Y_MM = 80.0
-SLAB_Z_MM = 50.0
+SLAB_Z_MM = MC_SHALLOW_DEPTH_MM + 44.5   # deep part kept at 44.5 mm (G1: 35 mm made little difference)
 SLAB_SOURCE_X_MM = 40.0
 
 # MCX per-face boundary string, faces ordered -x,-y,-z,+x,+y,+z
@@ -66,6 +72,22 @@ MCX_BC = "aaraaa"
 SDS_MM = np.array([10.0, 20.0, 30.0])      # 1, 2, 3 cm
 SDS_LABELS = ["1cm", "2cm", "3cm"]
 DET_RADIUS_MM = 1.0
+
+# Fibres used in the real experiment (Nakabayashi 2023, Sec. 2.2) -- used by the
+# geometry-optimisation runs (scripts/geometry_sweep.py); the defaults above keep
+# the original pencil source / all-angle detector.
+#   source  : FT400EMT multimode, core 400 um, NA 0.39 (Thorlabs catalog)
+#   detector: S630-HP single-mode, NA 0.12, MFD 4.2 um (Coherent S630-HP datasheet)
+# Acceptance half-angle inside the medium: asin(NA / n).
+SOURCE_FIBER_NA = 0.39
+SOURCE_FIBER_CORE_RADIUS_MM = 0.2          # below the 0.5 mm voxel -> not modelled as a disk
+DETECTOR_FIBER_NA = 0.12
+SOURCE_HALF_ANGLE_RAD = float(np.arcsin(SOURCE_FIBER_NA / 1.37))      # ~16.5 deg
+DETECTOR_HALF_ANGLE_RAD = float(np.arcsin(DETECTOR_FIBER_NA / 1.37))  # ~5.0 deg inside the medium
+# MCX's saved exit direction is the refracted one in air (detected photons reach ~89 deg,
+# beyond the 46.9 deg critical angle inside n=1.37), so the filter compares in air:
+# sin(theta_air) <= NA  <=>  1.37 sin(theta_medium) <= NA  (same photons, Snell's law).
+DETECTOR_HALF_ANGLE_AIR_RAD = float(np.arcsin(DETECTOR_FIBER_NA))     # ~6.9 deg
 
 # ============================================================
 # DCS DELAY TIME AXIS
@@ -122,7 +144,7 @@ def print_summary():
     print("=== wachirawit.chai DCS parameters ===")
     print(f"mu_a={MU_A_MM:.4f} mm^-1  mu_s'={MU_SP_MM:.4f} mm^-1  "
           f"n={REFRACTIVE_INDEX_N}  k0={K0:.4f} mm^-1")
-    print(f"geometry={DEFAULT_GEOMETRY}  shallow={SHALLOW_DEPTH_MM}mm  "
+    print(f"geometry={DEFAULT_GEOMETRY}  shallow={MC_SHALLOW_DEPTH_MM}mm (MC; phantom {SHALLOW_DEPTH_MM}mm)  "
           f"deep={DEEP_DEPTH_MM}mm  voxel={VOXEL_SIZE_MM}mm")
     print(f"SDS={SDS_MM} mm  tau=0..{TAU_US[-1]:.0f}us ({N_TAU} pts)")
     print(f"default a={DEFAULT_A_MM2_S_PER_FR:.2e} mm^2/s per (ml/min/100g)  "
