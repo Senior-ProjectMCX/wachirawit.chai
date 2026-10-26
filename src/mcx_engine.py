@@ -53,6 +53,16 @@ def create_voxel_grid(geometry=cfg.DEFAULT_GEOMETRY, unitinmm=cfg.VOXEL_SIZE_MM)
         vol[:, :, :z_shallow_end] = 1
         vol[:, :, z_shallow_end:] = 2
 
+    elif geometry == "paper":
+        nx = int(cfg.PHANTOM_X_MM / unitinmm)
+        ny = int(cfg.PHANTOM_Y_MM / unitinmm)
+        nz = int(round(cfg.PAPER_FLUID_Z_MM / unitinmm))
+        vol = np.zeros((nx, ny, nz), dtype=np.uint8)
+
+        z_shallow_end = int(cfg.SHALLOW_DEPTH_MM / unitinmm)
+        vol[:, :, :z_shallow_end] = 1
+        vol[:, :, z_shallow_end:] = 2
+
     elif geometry == "realistic":
         nx = int(cfg.PHANTOM_X_MM / unitinmm)
         ny = int(cfg.PHANTOM_Y_MM / unitinmm)
@@ -94,7 +104,12 @@ def run_simulation(nphoton=1e8, geometry=cfg.DEFAULT_GEOMETRY, unitinmm=cfg.VOXE
     ]
 
     nx, ny, nz = vol.shape
-    src_x = cfg.SLAB_SOURCE_X_MM / unitinmm if geometry == "simplified" else nx / 2.0
+    if geometry == "simplified":
+        src_x = cfg.SLAB_SOURCE_X_MM / unitinmm
+    elif geometry == "paper":
+        src_x = cfg.PAPER_SOURCE_X_MM / unitinmm
+    else:
+        src_x = nx / 2.0
     srcpos = [src_x, ny / 2.0, 0.0]
 
     sds_voxels = [int(round(d / unitinmm)) for d in cfg.SDS_MM]
@@ -117,7 +132,7 @@ def run_simulation(nphoton=1e8, geometry=cfg.DEFAULT_GEOMETRY, unitinmm=cfg.VOXE
         "tstart": 0.0,
         "tend": 5e-9,
         "tstep": 5e-9,
-        "bc": cfg.MCX_BC,
+        "bc": cfg.PAPER_BC if geometry == "paper" else cfg.MCX_BC,
     }
 
     far_det_x = srcpos[0] + sds_voxels[-1] + det_radius_vox
@@ -185,7 +200,7 @@ def main():
     parser = argparse.ArgumentParser(description="Run the DCS two-layer phantom MCX simulation")
     parser.add_argument("--nphoton", type=float, default=1e8)
     parser.add_argument("--geometry", type=str, default=cfg.DEFAULT_GEOMETRY,
-                         choices=["simplified", "realistic"])
+                         choices=["simplified", "paper", "realistic"])
     parser.add_argument("--output", type=str, default="data/pathlengths.npz")
     parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args()

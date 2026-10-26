@@ -44,8 +44,7 @@ SDS = data_io.SDS_LABELS
 def build_design(meta, per_combo, seed):
     """Group non-excluded trials by FR_set combo, cap trials per combo, and assign
     every combo to a cell of the 4x4 (shallow bin, deep bin) grid by rank quantile."""
-    keep = np.where(meta["fr_set_d"] != 0.0)[0]
-    assert not np.any((meta["fr_set_s"][keep] == 0) & (meta["fr_set_d"][keep] == 0))
+    keep = np.where(~data_io.excluded_condition(meta["fr_set_s"], meta["fr_set_d"]))[0]
     rng = np.random.default_rng(seed)
     combos = {}
     for i in keep:
@@ -152,10 +151,10 @@ class Evaluator:
                 "rmse": float(np.sqrt(np.mean(d ** 2))),
                 "r2_per_trial_median": float(np.median(r2t)),
                 "r2_pooled": float(_r2(sim[s], ref[s])),
-                "bfi_A_pearson_r": _corr(bfi_sim[s], bfi_phys[s]),
-                "bfi_A_ratio": float(np.median(bfi_sim[s] / bfi_phys[s])),
-                "bfi_B_pearson_r": _corr(bfi_sim[s], bfi_file[s]),
-                "bfi_B_ratio": float(np.median(bfi_sim[s] / bfi_file[s])),
+                "bfi_X_pearson_r": _corr(bfi_sim[s], bfi_phys[s]),
+                "bfi_X_ratio": float(np.median(bfi_sim[s] / bfi_phys[s])),
+                "bfi_Y_pearson_r": _corr(bfi_sim[s], bfi_file[s]),
+                "bfi_Y_ratio": float(np.median(bfi_sim[s] / bfi_file[s])),
             })
         return rows
 
@@ -172,8 +171,8 @@ def print_rows(title, rows):
     print(f"  {title}")
     for r in rows:
         print(f"    {r['sds']}: n={r['n']:<4} RMSE={r['rmse']:.4f}  R2/trial={r['r2_per_trial_median']:.3f}  "
-              f"R2pool={r['r2_pooled']:.3f}  BFI-A R={r['bfi_A_pearson_r']:.3f} ratio={r['bfi_A_ratio']:.2f}  "
-              f"BFI-B R={r['bfi_B_pearson_r']:.3f}")
+              f"R2pool={r['r2_pooled']:.3f}  BFI-X R={r['bfi_X_pearson_r']:.3f} ratio={r['bfi_X_ratio']:.2f}  "
+              f"BFI-Y R={r['bfi_Y_pearson_r']:.3f}")
 
 
 # ------------------------------------------------------------------ main
@@ -276,13 +275,13 @@ def make_plots(results, outdir):
 
 def summarize(results, baseline):
     print("\n================ SUMMARY over seeds (E1 held-out, mean [min,max]) ================")
-    print(f"{'SDS':<5}{'RMSE':>20}{'R2/trial':>24}{'BFI-A R':>22}{'full-data R2/trial':>20}")
+    print(f"{'SDS':<5}{'RMSE':>20}{'R2/trial':>24}{'BFI-X R':>22}{'full-data R2/trial':>20}")
     for s in range(3):
         def stat(k):
             v = np.array([r["E1"]["overall"][s][k] for r in results])
             return f"{v.mean():.3f} [{v.min():.3f},{v.max():.3f}]"
         b = baseline[s]["r2_per_trial_median"] if baseline else float("nan")
-        print(f"{SDS[s]:<5}{stat('rmse'):>20}{stat('r2_per_trial_median'):>24}{stat('bfi_A_pearson_r'):>22}{b:>20.3f}")
+        print(f"{SDS[s]:<5}{stat('rmse'):>20}{stat('r2_per_trial_median'):>24}{stat('bfi_X_pearson_r'):>22}{b:>20.3f}")
 
 
 def main():

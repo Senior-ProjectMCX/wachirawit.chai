@@ -1,7 +1,7 @@
 """
 Our model vs Wichuda_r's model on the closest-row test set (dataset/testset_closest.csv,
-108 trials, one per condition, deep != 0), scored with Compare Method (Simple):
-RMSE and R^2 of g2 vs the physical g2 of the same trial, BFI-A and BFI-B.
+132 trials, one per condition, (0,0) excluded), scored with Compare Method (Simple):
+RMSE and R^2 of g2 vs the physical g2 of the same trial, BFI-X and BFI-Y.
 
 Cases
   ours           our MCX photons, FR_meas, (a, D_B0) calibrated on the test set, beta per SDS
@@ -56,22 +56,22 @@ def score(name, sim, ref, beta, tau, bfi_phys, bfi_file):
             "rmse": float(np.sqrt(np.mean(d ** 2))),
             "r2_per_trial_median": float(np.median([_r2(sim[s][:, j], ref[s][:, j]) for j in range(ref.shape[2])])),
             "r2_pooled": float(_r2(sim[s], ref[s])),
-            "bfi_A_pearson_r": float(np.corrcoef(bfi_sim[s], bfi_phys[s])[0, 1]),
-            "bfi_A_median_ratio": float(np.median(bfi_sim[s] / bfi_phys[s])),
-            "bfi_B_pearson_r": float(np.corrcoef(bfi_sim[s], bfi_file[s])[0, 1]),
-            "bfi_B_median_ratio": float(np.median(bfi_sim[s] / bfi_file[s])),
+            "bfi_X_pearson_r": float(np.corrcoef(bfi_sim[s], bfi_phys[s])[0, 1]),
+            "bfi_X_median_ratio": float(np.median(bfi_sim[s] / bfi_phys[s])),
+            "bfi_Y_pearson_r": float(np.corrcoef(bfi_sim[s], bfi_file[s])[0, 1]),
+            "bfi_Y_median_ratio": float(np.median(bfi_sim[s] / bfi_file[s])),
         })
     per_trial = {
         "rmse": np.sqrt(np.mean((sim - ref) ** 2, axis=1)),                      # (3, n)
         "r2": np.array([[_r2(sim[s][:, j], ref[s][:, j]) for j in range(ref.shape[2])] for s in range(3)]),
-        "bfi_abs_err": np.abs(bfi_sim - bfi_phys),                              # BFI-A, per trial
+        "bfi_abs_err": np.abs(bfi_sim - bfi_phys),                              # BFI-X, per trial
         "bfi": bfi_sim,
     }
     print(f"\n[{name}]")
     for r in rows:
         print(f"  {r['sds']}: RMSE={r['rmse']:.4f}  R2/trial={r['r2_per_trial_median']:.3f}  "
-              f"R2pool={r['r2_pooled']:.3f}  BFI-A R={r['bfi_A_pearson_r']:.3f} "
-              f"ratio={r['bfi_A_median_ratio']:.2f}  BFI-B R={r['bfi_B_pearson_r']:.3f}", flush=True)
+              f"R2pool={r['r2_pooled']:.3f}  BFI-X R={r['bfi_X_pearson_r']:.3f} "
+              f"ratio={r['bfi_X_median_ratio']:.2f}  BFI-Y R={r['bfi_Y_pearson_r']:.3f}", flush=True)
     return rows, per_trial
 
 
@@ -133,7 +133,7 @@ def main():
     beta = data_io.extract_beta(g2)
     tau = data_io.TAU_ARRAY
     trials = np.sort(pd.read_csv(os.path.join(ROOT, "dataset", "testset_closest.csv"))["Trial_Index"].to_numpy(int))
-    assert np.all(meta["fr_set_d"][trials] != 0.0)
+    assert not np.any(data_io.excluded_condition(meta["fr_set_s"][trials], meta["fr_set_d"][trials]))
     ref = g2[:, :, trials]
     print(f"test set: {len(trials)} trials")
 

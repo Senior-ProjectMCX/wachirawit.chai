@@ -52,7 +52,7 @@ def cmd_validate_geometry(args):
     print(f"Coherence factors beta = {beta[0]:.3f} / {beta[1]:.3f} / {beta[2]:.3f} "
           f"(expect ~0.407/0.494/0.490)")
 
-    keep = meta["fr_set_d"] != 0.0 if not args.include_deep_zero else np.ones(meta["n_trials"], bool)
+    keep = ~data_io.excluded_condition(meta["fr_set_s"], meta["fr_set_d"]) if not args.include_deep_zero else np.ones(meta["n_trials"], bool)
     fr_s, fr_d = meta["fr_meas_s"][keep], meta["fr_meas_d"][keep]
 
     gt = bfi_fit.regress_c2c1(meta["bfi"][:, keep], fr_s, fr_d)

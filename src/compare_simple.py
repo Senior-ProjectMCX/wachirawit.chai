@@ -10,15 +10,16 @@ Steps, each tied to Nakabayashi et al. (2023, BOE 14(10) 5358) where the paper d
          g2(tau)   = 1 + beta * |g1(tau)|^2                       (paper Eq. 2, Siegert)
      beta per SDS = mean(physical g2(0)) - 1.
   2. Calibrate the two physical constants (a, D_B0) ONCE: least squares of g2_sim vs g2_phys,
-     one representative trial per preset combo (all 108 combos, tau every 5th point).
+     one representative trial per preset combo (all 132 combos, tau every 5th point).
   3. Metrics vs the physical g2 of the SAME trial: RMSE and R^2 of g2 (not defined by the
      paper -- standard statistics).
   4. BFI: fit g2(tau) with the semi-infinite homogeneous model (paper Eq. 3), beta per curve,
      on the sim curve and on the physical curve with the same fitter:
-         BFI-A = BFI(sim g2)  vs  BFI(physical g2)               (isolates the sim error)
-         BFI-B = BFI(sim g2)  vs  BFI column of metadata.csv      (paper/lab fit; the absolute
-                                                                   scale differs from our fitter)
-Deep-flow == 0 trials (including (0,0)) are excluded, per Goal.md.
+         BFI-X = BFI computed by us (this fitter); test: BFI-X(sim g2) vs BFI-X(physical g2)
+                 (same fitter on both sides -> isolates the sim error)
+         BFI-Y = BFI column of metadata.csv, computed by the paper/lab with an algorithm we do not
+                 know; test: BFI-X(sim g2) vs BFI-Y (absolute scale differs from our fitter)
+The (0,0) condition is excluded, per Goal.md (deep == 0 with shallow > 0 is kept).
 
 Usage:  .venv/bin/python src/compare_simple.py [--per-combo 5]   (0 = every trial)
         .venv/bin/python src/compare_simple.py --testset dataset/testset_closest.csv
@@ -47,7 +48,7 @@ def run(pathlengths_path, per_combo, seed, out_json, testset=None):
     tau = data_io.TAU_ARRAY
     fr_s, fr_d = meta["fr_meas_s"], meta["fr_meas_d"]
 
-    keep = np.where(meta["fr_set_d"] != 0.0)[0]
+    keep = np.where(~data_io.excluded_condition(meta["fr_set_s"], meta["fr_set_d"]))[0]
     combos = {}
     for i in keep:
         combos.setdefault((meta["fr_set_s"][i], meta["fr_set_d"][i]), []).append(i)
@@ -63,10 +64,11 @@ def run(pathlengths_path, per_combo, seed, out_json, testset=None):
         # one pre-selected trial per condition (scripts/make_testset.py): use it both to
         # calibrate and to evaluate
         trials = np.sort(pd.read_csv(testset)["Trial_Index"].to_numpy(int))
-        assert np.all(meta["fr_set_d"][trials] != 0.0), "test set contains Deep_Flow==0 rows"
+        assert not np.any(data_io.excluded_condition(meta["fr_set_s"][trials], meta["fr_set_d"][trials])), \
+            "test set contains (0,0) rows"
         print(f"using test set {testset}")
     print(f"{len(combos)} preset combos, {len(trials)} trials evaluated "
-          f"(Deep_Flow==0 excluded: {meta['n_trials'] - len(keep)} trials)")
+          f"((0,0) excluded: {meta['n_trials'] - len(keep)} trials)")
 
     pl = np.load(pathlengths_path)
     drng = np.random.default_rng(42)
@@ -104,25 +106,25 @@ def run(pathlengths_path, per_combo, seed, out_json, testset=None):
             "rmse": float(np.sqrt(np.mean(d ** 2))),
             "r2_per_trial_median": float(np.median(r2t)),
             "r2_pooled": float(_r2(sim[s], ref[s])),
-            "bfi_A_pearson_r": float(np.corrcoef(bfi_sim[s], bfi_phys[s])[0, 1]),
-            "bfi_A_median_ratio": float(np.median(bfi_sim[s] / bfi_phys[s])),
-            "bfi_A_rmse": float(np.sqrt(np.mean((bfi_sim[s] - bfi_phys[s]) ** 2))),
-            "bfi_B_pearson_r": float(np.corrcoef(bfi_sim[s], bfi_file[s])[0, 1]),
-            "bfi_B_median_ratio": float(np.median(bfi_sim[s] / bfi_file[s])),
+            "bfi_X_pearson_r": float(np.corrcoef(bfi_sim[s], bfi_phys[s])[0, 1]),
+            "bfi_X_median_ratio": float(np.median(bfi_sim[s] / bfi_phys[s])),
+            "bfi_X_rmse": float(np.sqrt(np.mean((bfi_sim[s] - bfi_phys[s]) ** 2))),
+            "bfi_Y_pearson_r": float(np.corrcoef(bfi_sim[s], bfi_file[s])[0, 1]),
+            "bfi_Y_median_ratio": float(np.median(bfi_sim[s] / bfi_file[s])),
             "our_fitter_vs_file_ratio": float(np.median(bfi_phys[s] / bfi_file[s])),
         })
 
     print("\n=========== Simple compare (sim vs physical, same trials) ===========")
-    print(f"{'SDS':<5}{'RMSE':>9}{'R2/trial':>10}{'R2 pooled':>11}{'BFI-A R':>9}{'A ratio':>9}"
-          f"{'BFI-B R':>9}{'B ratio':>9}")
+    print(f"{'SDS':<5}{'RMSE':>9}{'R2/trial':>10}{'R2 pooled':>11}{'BFI-X R':>9}{'X ratio':>9}"
+          f"{'BFI-Y R':>9}{'Y ratio':>9}")
     for r in rows:
         print(f"{r['sds']:<5}{r['rmse']:>9.4f}{r['r2_per_trial_median']:>10.3f}{r['r2_pooled']:>11.3f}"
-              f"{r['bfi_A_pearson_r']:>9.3f}{r['bfi_A_median_ratio']:>9.2f}"
-              f"{r['bfi_B_pearson_r']:>9.3f}{r['bfi_B_median_ratio']:>9.2f}")
-    print("(R2 target ~0.95; BFI-A: sim vs physical g2 same fitter; BFI-B: vs metadata.csv BFI column)")
+              f"{r['bfi_X_pearson_r']:>9.3f}{r['bfi_X_median_ratio']:>9.2f}"
+              f"{r['bfi_Y_pearson_r']:>9.3f}{r['bfi_Y_median_ratio']:>9.2f}")
+    print("(R2 target ~0.95; BFI-X: sim vs physical g2 same fitter; BFI-Y: vs metadata.csv BFI column)")
     print("our fitter on physical g2 / file BFI: "
           + "  ".join(f"{r['sds']}={r['our_fitter_vs_file_ratio']:.2f}" for r in rows)
-          + "   (!=1 => BFI-B absolute scale not comparable)")
+          + "   (!=1 => BFI-Y absolute scale not comparable)")
 
     os.makedirs(os.path.dirname(out_json) or ".", exist_ok=True)
     with open(out_json, "w") as f:

@@ -7,8 +7,8 @@ Ported from core/code/generate_dataset.py, with two fixes:
   - bug 3.8: drives the simulation with FR_meas (measured outlet flow), not
     FR_set (pump preset) -- section 2.3 of the analysis doc showed FR_meas is
     what the paper's own c1/c2/c3 regression was fit against.
-  - Goal.md (2026-09-30): rows with Deep_Flow == 0 are already filtered out
-    by data_io.load_flow_table() before they ever reach this module.
+  - Goal.md: the (0,0) rows are already filtered out by data_io.load_flow_table()
+    before they ever reach this module (deep == 0 with shallow > 0 is kept).
 """
 import argparse
 import os
@@ -76,7 +76,7 @@ def main():
     parser.add_argument("--db0", type=float, default=cfg.DEFAULT_DB0_MM2_S)
     parser.add_argument("--max-photons", type=int, default=10_000)
     parser.add_argument("--include-deep-zero", action="store_true",
-                         help="Do NOT filter out Deep_Flow==0 trials (overrides Goal.md default)")
+                         help="Do NOT filter out the (0,0) trials (overrides Goal.md default)")
     args = parser.parse_args()
 
     generate_synthetic_dataset(args.pathlengths, args.output, a=args.a, db0=args.db0,

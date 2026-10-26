@@ -8,9 +8,9 @@ bfi_fit.py), then reports held-out R^2 / MAE / RMSE per SDS.
 Ported from core/code/compare.py, with:
   - bug 3.6 preserved as a fix: ONE shared scale `a` for both layers, not two
     independent scale_s/scale_d (that was overfitting, see analysis doc 3.6).
-  - Deep_Flow==0 trials excluded from the train/test combos by default, to
-    match the 2026-09-30 revision of Goal.md.
-  - Train/test split by PRESET pump combo (108 combos), while the physics is
+  - the (0,0) condition is excluded from the train/test combos by default, per
+    Goal.md (clarified 2026-10-15: deep == 0 with shallow > 0 is kept).
+  - Train/test split by PRESET pump combo (132 combos), while the physics is
     driven by the MEASURED outlet flow. Splitting on measured flow (which is
     noisy and near-unique per trial) put repeats of the same condition on both
     sides of the split and made calibration fit ~740 "combos".
@@ -109,8 +109,8 @@ def run_comparison(pathlengths_path, plot_output_path, metrics_output_path="plot
 
     keep = np.ones(meta["n_trials"], dtype=bool)
     if skip_deep_flow_zero:
-        keep = meta["fr_set_d"] != 0.0
-        print(f"Excluding {np.sum(~keep)} physical trials with Deep_Flow==0 "
+        keep = ~data_io.excluded_condition(meta["fr_set_s"], meta["fr_set_d"])
+        print(f"Excluding {np.sum(~keep)} physical trials of the (0,0) condition "
               f"({np.sum(keep)} remain), per Goal.md")
 
     pl = np.load(pathlengths_path)
@@ -159,8 +159,8 @@ def run_comparison(pathlengths_path, plot_output_path, metrics_output_path="plot
     #   input to sim   = FR_meas (what actually flowed)
     #   g2 reference   = physical g2 of the SAME trial
     #   split grouping = FR_set preset combo
-    #   BFI-A          = sim BFI vs physical-g2 BFI, same fitter (isolates sim error)
-    #   BFI-B          = sim BFI vs BFI column in metadata.csv (lab/paper fitter; the
+    #   BFI-X          = sim BFI vs physical-g2 BFI, same fitter (isolates sim error)
+    #   BFI-Y          = sim BFI vs BFI column in metadata.csv (lab/paper fitter; the
     #                    absolute scale differs per SDS, see bfi_fit_vs_file_ratio)
     bfi_file = meta["bfi"][:, test_idx]            # 1e-9 cm^2/s
     bfi_sim_file_units = bfi_sim * BFI_MM2S_TO_FILE
@@ -180,25 +180,25 @@ def run_comparison(pathlengths_path, plot_output_path, metrics_output_path="plot
             "rmse_per_trial_median": float(np.median(per_trial_rmse)),
             "r2_per_trial_median": float(np.median(per_trial_r2)),
             "r2_pooled": float(_r2(sim_test[s], ref_test[s])),
-            "bfi_A_pearson_r": float(np.corrcoef(bfi_sim[s], bfi_phys[s])[0, 1]),
-            "bfi_A_median_ratio_sim_over_phys": float(np.median(bfi_sim[s] / bfi_phys[s])),
-            "bfi_A_rmse_1e-9cm2s": float(np.sqrt(np.mean((bfi_sim_file_units[s] - bfi_phys_file_units[s]) ** 2))),
-            "bfi_B_pearson_r": float(np.corrcoef(bfi_sim_file_units[s], bfi_file[s])[0, 1]),
-            "bfi_B_median_ratio_sim_over_file": float(np.median(bfi_sim_file_units[s] / bfi_file[s])),
-            "bfi_B_rmse_1e-9cm2s": float(np.sqrt(np.mean((bfi_sim_file_units[s] - bfi_file[s]) ** 2))),
+            "bfi_X_pearson_r": float(np.corrcoef(bfi_sim[s], bfi_phys[s])[0, 1]),
+            "bfi_X_median_ratio_sim_over_phys": float(np.median(bfi_sim[s] / bfi_phys[s])),
+            "bfi_X_rmse_1e-9cm2s": float(np.sqrt(np.mean((bfi_sim_file_units[s] - bfi_phys_file_units[s]) ** 2))),
+            "bfi_Y_pearson_r": float(np.corrcoef(bfi_sim_file_units[s], bfi_file[s])[0, 1]),
+            "bfi_Y_median_ratio_sim_over_file": float(np.median(bfi_sim_file_units[s] / bfi_file[s])),
+            "bfi_Y_rmse_1e-9cm2s": float(np.sqrt(np.mean((bfi_sim_file_units[s] - bfi_file[s]) ** 2))),
             "bfi_fit_vs_file_ratio": float(np.median(bfi_phys_file_units[s] / bfi_file[s])),
         }
         per_sds.append(row)
 
     print(f"{'SDS':<5}{'RMSE':>9}{'RMSE/trial':>12}{'R2/trial':>10}{'R2 pooled':>11}"
-          f"{'BFI-A R':>10}{'A ratio':>9}{'BFI-B R':>10}{'B ratio':>9}")
+          f"{'BFI-X R':>10}{'X ratio':>9}{'BFI-Y R':>10}{'Y ratio':>9}")
     for r in per_sds:
         print(f"{r['sds']:<5}{r['rmse']:>9.4f}{r['rmse_per_trial_median']:>12.4f}"
               f"{r['r2_per_trial_median']:>10.4f}{r['r2_pooled']:>11.4f}"
-              f"{r['bfi_A_pearson_r']:>10.4f}{r['bfi_A_median_ratio_sim_over_phys']:>9.3f}"
-              f"{r['bfi_B_pearson_r']:>10.4f}{r['bfi_B_median_ratio_sim_over_file']:>9.3f}")
-    print("  (target: R^2 >= 0.95)   BFI-A = sim vs physical g2, same fitter;  "
-          "BFI-B = sim vs BFI column in metadata.csv")
+              f"{r['bfi_X_pearson_r']:>10.4f}{r['bfi_X_median_ratio_sim_over_phys']:>9.3f}"
+              f"{r['bfi_Y_pearson_r']:>10.4f}{r['bfi_Y_median_ratio_sim_over_file']:>9.3f}")
+    print("  (target: R^2 >= 0.95)   BFI-X = sim vs physical g2, same fitter;  "
+          "BFI-Y = sim vs BFI column in metadata.csv")
     print("  our fitter on PHYSICAL g2 vs file BFI (should be ~1 if fitters agree): "
           + "  ".join(f"{r['sds']}={r['bfi_fit_vs_file_ratio']:.3f}" for r in per_sds))
 

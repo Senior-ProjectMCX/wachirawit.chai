@@ -8,7 +8,7 @@ For each optics fraction f: run MCX with mu_a, mu_s' = f * nominal (cached to
 data/pathlengths_optics_<f>.npz; f=1.0 reuses data/pathlengths.npz), synthesise g2
 with the same reduced mu_a, keep the BFI fitter at the paper's NOMINAL optics
 (as the paper's own analysis would), then report per seed:
-  - E1 held-out metrics (RMSE, R2/trial, BFI-A R) on the 4x4 stratified subset
+  - E1 held-out metrics (RMSE, R2/trial, BFI-X R) on the 4x4 stratified subset
   - the shallow-low/deep-high corner (R2, RMSE) with the grid-covering calibration
   - c2/c1 of synthetic BFI vs the physical same-fitter c2/c1 (geometry gate)
 

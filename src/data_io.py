@@ -6,8 +6,9 @@ Obsidian):
 
   1. wachirawit.chai/dataset/Dataset_metadata.csv
      -> the table of (shallow, deep) flow conditions to DRIVE the simulation.
-        Deep-flow==0 trials are filtered out here by default, per the
-        2026-09-30 revision of Goal.md.
+        The (0, 0) condition (no flow in either layer) is filtered out here by
+        default, per Goal.md ("ข้ามกรณี Flow rate ที่ชั้นลึกตื้น = 0"; clarified
+        2026-10-15: only (0, 0) is skipped, deep == 0 with shallow > 0 is kept).
 
   2. core/data/{metadata.csv, g2_SDS{1,2,3}cm.csv}
      -> the PHYSICAL lab measurements used as ground truth for compare.py /
@@ -29,6 +30,12 @@ CORE_DATA_DIR = os.path.join(PROJECT_ROOT, "core", "data")
 OUTPUT_DATA_DIR = os.path.join(WACHIRAWIT_ROOT, "data")
 
 N_TAU = 501
+
+
+def excluded_condition(fr_set_s, fr_set_d):
+    """True for the (0, 0) preset condition, the only one skipped per Goal.md."""
+    return (np.asarray(fr_set_s) == 0.0) & (np.asarray(fr_set_d) == 0.0)
+
 TAU_ARRAY = np.arange(N_TAU) * 1e-6          # seconds, 0..500us step 1us
 SDS_LABELS = ["1cm", "2cm", "3cm"]
 
@@ -49,8 +56,8 @@ def load_flow_table(skip_deep_flow_zero=True, data_dir=WACHIRAWIT_DATASET_DIR):
 
     if skip_deep_flow_zero:
         before = len(df)
-        df = df[df["Deep_Flow_Preset_Pump"] != 0.0].reset_index(drop=True)
-        print(f"load_flow_table: skipped {before - len(df)} deep-flow==0 trials "
+        df = df[~excluded_condition(df["Shallow_Flow_Preset_Pump"], df["Deep_Flow_Preset_Pump"])].reset_index(drop=True)
+        print(f"load_flow_table: skipped {before - len(df)} (0,0) trials "
               f"({len(df)} remain) per Goal.md")
 
     return {

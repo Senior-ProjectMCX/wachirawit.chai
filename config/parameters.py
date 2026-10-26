@@ -60,6 +60,17 @@ SLAB_SOURCE_X_MM = 40.0
 # Top face (-z, tissue/air, n=1.37 vs 1.0) is Fresnel; the far faces absorb.
 MCX_BC = "aaraaa"
 
+# 'paper' geometry: the fluid volume at the paper's stated size (Nakabayashi Sec. 2.1:
+# phantom 100 x 50 mm, shallow 5.5 mm + deep 35 mm). Acrylic wall thickness is not
+# given, so the fluid fills the full 100 x 50 footprint; Mylar (0.05 mm) is not
+# voxelised (bug 3.2). The phantom is a closed box, so every face is Fresnel ('r':
+# fluid n=1.37 vs outside n=1.0) instead of the absorbing far faces of the slab.
+# Probe placement is not given either: the source-to-3cm-detector span is centred on
+# the 100 mm length (source at 35 mm, detectors at 45/55/65 mm), y at the centre.
+PAPER_FLUID_Z_MM = SHALLOW_DEPTH_MM + DEEP_DEPTH_MM      # 40.5
+PAPER_SOURCE_X_MM = (PHANTOM_X_MM - 30.0) / 2.0          # 35.0
+PAPER_BC = "rrrrrr"
+
 # ============================================================
 # SOURCE / DETECTOR
 # ============================================================
