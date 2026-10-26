@@ -1,0 +1,21 @@
+{
+  "model_A": {
+    "photons_file": "data/pathlengths_paper_geom_n1e08.npz",
+    "photons_launched": 100000000.0,
+    "a_mm2_s_per_flow": 9.425038956580263e-08,
+    "db0_mm2_s": 6.675067762504524e-07,
+    "fit_trials": 660
+  },
+  "model_B": {
+    "source": "Wichuda_r commit 64985e7",
+    "flow_to_alphaDB": "0.4e-6 * preset flow",
+    "pathlength_unit_fix": "x0.5 (voxel -> mm)",
+    "beta": "per condition"
+  },
+  "data": {
+    "testset": "dataset/testset_closest_k5.csv",
+    "k": 5,
+    "conditions": 132,
+    "real_curve": "mean of the 5 trials per condition"
+  }
+}
