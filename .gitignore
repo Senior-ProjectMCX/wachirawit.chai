@@ -15,3 +15,6 @@ plots/*.pdf
 # unavailable on PyPI as of 2026-09-30) -- not a project source dependency,
 # see Issue and Solution in Obsidian for why this exists.
 build_src/
+
+# output of src/main.py generate
+generated/

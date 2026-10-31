@@ -21,6 +21,24 @@ python src/main.py run-mcx      # once (~45 s): 1e8 photons -> data/pathlengths.
 python src/main.py calibrate    # ~5 min: Nelder-Mead fit of (a, D_B0), metrics, figures -> final_result/
 ```
 
+### Generate g2 for any flow rate
+
+Uses the existing photons (`data/pathlengths.npz`) and the fitted a, D_B0, β
+(`final_result/model_a.json`); no MCX run needed (MCX output does not depend on flow).
+
+```bash
+python src/main.py generate --flows 5,20 12,30           # (shallow, deep) ml/min/100g
+python src/main.py generate --flow-csv my_flows.csv      # columns FR_shallow, FR_deep
+```
+
+Output `generated/g2_generated.csv`: one row per (flow, SDS), columns tau_0us … tau_500us.
+From Python:
+
+```python
+from generate import generate_g2              # run with src/ on sys.path
+g2 = generate_g2([(5, 20), (12, 30)])         # shape (n_flows, 3 SDS, 501 tau)
+```
+
 ## Model
 
 | Step | What | File |
@@ -32,6 +50,7 @@ python src/main.py calibrate    # ~5 min: Nelder-Mead fit of (a, D_B0), metrics,
 | Calibration | least squares of g2 (sim vs real), Nelder-Mead in log10 (a, D_B0) | `src/calibrate.py` |
 | Metrics | R² per curve (median, mean), pooled RMSE, BFI-X / BFI-Y ratio (semi-infinite fit, paper Eq. 3) | `src/calibrate.py`, `src/bfi_fit.py` |
 | Figures | real (black) vs Model A (blue dashed) for every condition | `src/plot_results.py` |
+| Generate | g2 for chosen flow rates from existing photons | `src/generate.py` |
 
 Test set: `dataset/testset_closest_k5.csv` — for each of the 132 flow conditions ((0,0)
 excluded) the 5 trials whose measured flow is closest to the preset (660 trials), built by

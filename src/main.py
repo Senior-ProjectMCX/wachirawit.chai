@@ -4,6 +4,7 @@ Model A pipeline: one CLI for the three stages.
     python src/main.py run-mcx       # once: MCX photons -> data/pathlengths.npz
     python src/main.py calibrate     # Nelder-Mead fit of (a, D_B0) + metrics + figures
     python src/main.py all           # both
+    python src/main.py generate --flows 5,20 12,30    # g2 for chosen (shallow, deep) flows
 """
 import argparse
 import json
@@ -68,6 +69,19 @@ def cmd_calibrate(args):
     print(f"saved {args.out}")
 
 
+def cmd_generate(args):
+    import pandas as pd
+    from generate import generate_g2, save_csv
+    if args.flow_csv:
+        df = pd.read_csv(args.flow_csv)
+        flows = list(zip(df["FR_shallow"].astype(float), df["FR_deep"].astype(float)))
+    else:
+        flows = [tuple(float(x) for x in f.split(",")) for f in args.flows]
+    g2 = generate_g2(flows, pathlengths=args.pathlengths)
+    save_csv(args.out, flows, g2)
+    print(f"{len(flows)} flow(s) x 3 SDS -> {args.out}")
+
+
 def cmd_all(args):
     cmd_run_mcx(args)
     cmd_calibrate(args)
@@ -87,6 +101,14 @@ def build_parser():
             sp.add_argument("--testset", default=data_io.TESTSET_PATH)
             sp.add_argument("--out", default=os.path.join(data_io.ROOT, "final_result"))
         sp.set_defaults(func=func)
+
+    sp = sub.add_parser("generate", help="g2 for chosen (shallow, deep) flows from existing photons")
+    grp = sp.add_mutually_exclusive_group(required=True)
+    grp.add_argument("--flows", nargs="+", metavar="S,D", help="e.g. 5,20 12,30 (ml/min/100g)")
+    grp.add_argument("--flow-csv", help="CSV with columns FR_shallow, FR_deep")
+    sp.add_argument("--pathlengths", default=data_io.PATHLENGTHS_PATH)
+    sp.add_argument("--out", default=os.path.join(data_io.ROOT, "generated", "g2_generated.csv"))
+    sp.set_defaults(func=cmd_generate)
     return p
 
 
