@@ -6,6 +6,7 @@ __pycache__/
 
 # Generated pipeline outputs (regenerable from src/, not source)
 data/*.npz
+!data/pathlengths.npz
 data/*.csv
 plots/*.png
 plots/*.pdf
