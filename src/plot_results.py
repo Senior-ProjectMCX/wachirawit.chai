@@ -19,7 +19,7 @@ import numpy as np
 import pandas as pd
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from calibrate import r2
+from benchmark import r2
 
 SDS = ["1 cm", "2 cm", "3 cm"]
 C_REAL, C_A = "black", "#2a78d6"

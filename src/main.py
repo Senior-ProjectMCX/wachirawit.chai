@@ -1,9 +1,10 @@
 """
-Model A pipeline: one CLI for the three stages.
+Model A pipeline: one CLI for every stage.
 
     python src/main.py run-mcx       # once: MCX photons -> data/pathlengths.npz
-    python src/main.py calibrate     # Nelder-Mead fit of (a, D_B0) + metrics + figures
-    python src/main.py all           # both
+    python src/main.py calibrate     # Nelder-Mead fit of (a, D_B0) -> final_result/model_a.json
+    python src/main.py benchmark     # metrics + figures vs physical data -> final_result/
+    python src/main.py all           # run-mcx -> calibrate -> benchmark
     python src/main.py generate --flows 5,20 12,30    # g2 for chosen (shallow, deep) flows
 """
 import argparse
@@ -19,9 +20,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from config import parameters as cfg
 import data_io
-from calibrate import calibrate, evaluate
-from dcs_physics import synth_curves
-from plot_results import plot_all
+from calibrate import calibrate
 
 
 def cmd_run_mcx(args):
@@ -47,26 +46,21 @@ def cmd_calibrate(args):
     print(f"a = {a:.4e} mm^2/s per (ml/min/100g), D_B0 = {db0:.4e} mm^2/s "
           f"({res.nfev} evaluations, RMSE {np.sqrt(res.fun):.4f})")
 
-    sim = synth_curves(det, meta["fr_meas_s"], meta["fr_meas_d"], beta, tau, trials, a, db0)
-    print("fitting BFI on sim and physical curves...")
-    metrics = evaluate(sim, g2[:, :, trials], beta, tau, meta["bfi"][:, trials])
-    fmt = lambda v, d=3: " / ".join(f"{x:.{d}f}" for x in v)
-    print(f"R2 median   {fmt(metrics['r2_median'])}   (SDS 1 / 2 / 3 cm)")
-    print(f"R2 mean     {fmt(metrics['r2_mean'])}")
-    print(f"RMSE pooled {fmt(metrics['rmse_pooled'], 4)}")
-    print(f"BFI-X ratio median {fmt(metrics['bfiX_ratio_median'], 2)}   mean {fmt(metrics['bfiX_ratio_mean'], 2)}")
-    print(f"BFI-Y ratio median {fmt(metrics['bfiY_ratio_median'], 2)}   mean {fmt(metrics['bfiY_ratio_mean'], 2)}")
-
     os.makedirs(args.out, exist_ok=True)
-    met = plot_all(args.out, tau, meta, g2, sim, trials)
-    with open(os.path.join(args.out, "model_a.json"), "w") as f:
-        json.dump({"a_mm2_s_per_flow": a, "db0_mm2_s": db0, "nelder_mead_evals": int(res.nfev),
+    path = os.path.join(args.out, "model_a.json")
+    with open(path, "w") as f:
+        json.dump({"a_mm2_s_per_flow": a, "db0_mm2_s": db0, "beta": beta.tolist(),
+                   "nelder_mead_evals": int(res.nfev), "fit_rmse": float(np.sqrt(res.fun)),
                    "pathlengths": os.path.relpath(args.pathlengths, data_io.ROOT),
                    "testset": os.path.relpath(args.testset, data_io.ROOT),
-                   "n_trials": int(len(trials)), "n_conditions": int(len(met)),
-                   "photons_per_sds": cfg.PHOTONS_PER_SDS, "beta": beta.tolist(),
-                   "metrics_per_trial": metrics}, f, indent=2)
-    print(f"saved {args.out}")
+                   "n_trials": int(len(trials)), "photons_per_sds": cfg.PHOTONS_PER_SDS}, f, indent=2)
+    print(f"saved {path}")
+
+
+def cmd_benchmark(args):
+    import benchmark
+    benchmark.run(args.pathlengths, args.testset, os.path.join(args.out, "model_a.json"), args.out,
+                  plot=not args.no_plot)
 
 
 def cmd_generate(args):
@@ -85,14 +79,16 @@ def cmd_generate(args):
 def cmd_all(args):
     cmd_run_mcx(args)
     cmd_calibrate(args)
+    cmd_benchmark(args)
 
 
 def build_parser():
     p = argparse.ArgumentParser(description="Model A: DCS two-layer phantom simulation")
     sub = p.add_subparsers(dest="command", required=True)
     for name, func, help_ in (("run-mcx", cmd_run_mcx, "run MCX once -> pathlengths.npz"),
-                              ("calibrate", cmd_calibrate, "fit (a, D_B0), report metrics, plot"),
-                              ("all", cmd_all, "run-mcx then calibrate")):
+                              ("calibrate", cmd_calibrate, "Nelder-Mead fit of (a, D_B0) -> model_a.json"),
+                              ("benchmark", cmd_benchmark, "metrics + figures vs physical data"),
+                              ("all", cmd_all, "run-mcx -> calibrate -> benchmark")):
         sp = sub.add_parser(name, help=help_)
         sp.add_argument("--pathlengths", default=data_io.PATHLENGTHS_PATH)
         if name != "calibrate":
@@ -100,6 +96,8 @@ def build_parser():
         if name != "run-mcx":
             sp.add_argument("--testset", default=data_io.TESTSET_PATH)
             sp.add_argument("--out", default=os.path.join(data_io.ROOT, "final_result"))
+        if name in ("benchmark", "all"):
+            sp.add_argument("--no-plot", action="store_true", help="metrics only, skip figures")
         sp.set_defaults(func=func)
 
     sp = sub.add_parser("generate", help="g2 for chosen (shallow, deep) flows from existing photons")
